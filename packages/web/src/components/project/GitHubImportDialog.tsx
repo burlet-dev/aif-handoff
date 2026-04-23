@@ -83,7 +83,7 @@ export function GitHubImportDialog({ open, onOpenChange, onProjectCreated }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg sm:max-w-lg max-sm:mx-0 max-sm:w-full max-sm:max-w-full">
         <DialogClose onClose={() => onOpenChange(false)} />
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export function GitHubImportDialog({ open, onOpenChange, onProjectCreated }: Pro
           />
         </div>
 
-        <div className="max-h-80 overflow-y-auto border border-border">
+        <div className="max-h-80 max-sm:max-h-[70vh] overflow-y-auto border border-border">
           {isLoading && (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />

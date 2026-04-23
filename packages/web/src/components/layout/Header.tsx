@@ -78,15 +78,15 @@ export function Header({
   return (
     <header ref={headerRef} className="sticky top-0 z-60 border-b border-border bg-background">
       <div
-        className={`mx-auto flex w-full items-center ${isCompact ? "h-14 px-4 md:px-5" : "h-16 px-6 md:px-8"}`}
+        className={`mx-auto flex w-full items-center ${isCompact ? "h-14 px-2 sm:px-4 md:px-5" : "h-14 sm:h-16 px-2 sm:px-6 md:px-8"}`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             onClick={onDeselectProject}
             aria-label="Go to projects overview"
             title="Projects overview"
-            className="flex items-center focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="hidden sm:flex items-center focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -106,7 +106,7 @@ export function Header({
               />
             </svg>
           </button>
-          <div className="h-5 w-px bg-border" />
+          <div className="hidden sm:block h-5 w-px bg-border" />
           <ProjectSelector
             selectedId={selectedProject?.id ?? null}
             onSelect={onSelectProject}
@@ -114,7 +114,7 @@ export function Header({
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
           <Button
             variant="outline"
             size="sm"
@@ -217,34 +217,38 @@ export function Header({
             }
           >
             <Cpu className="h-3.5 w-3.5" />
-            <span>RUNTIME</span>
+            <span className="hidden md:inline">RUNTIME</span>
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={() => setGlobalSettingsOpen((v) => !v)}
-            className="h-8 w-8"
+            className="h-7 w-7 sm:h-8 sm:w-8"
             aria-label="Global settings"
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={() => setSettingsOpen((v) => !v)}
-            className="h-8 w-8"
+            className="h-7 w-7 sm:h-8 sm:w-8"
             aria-label="Notification settings"
           >
-            <Bell className="h-4 w-4" />
+            <Bell className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={toggleTheme}
-            className="h-8 w-8"
+            className="h-7 w-7 sm:h-8 sm:w-8"
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
           >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {theme === "dark" ? (
+              <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            ) : (
+              <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            )}
           </Button>
         </div>
       </div>

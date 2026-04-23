@@ -219,3 +219,30 @@ a {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-muted-foreground);
 }
+
+/* --- Mobile / touch adaptations --- */
+
+/* Prevent iOS zoom on input focus (requires font-size >= 16px) */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Full-bleed dialogs on small screens */
+@media (max-width: 640px) {
+  /* Remove horizontal padding so dialogs fill the screen */
+  .fixed.inset-0.flex {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    align-items: flex-start;
+  }
+
+  /* Hide horizontal scrollbar on body */
+  body {
+    overflow-x: hidden;
+  }
+}

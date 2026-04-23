@@ -1,6 +1,17 @@
-.PHONY: deploy restart start stop status logs logs-live sync
+.PHONY: pre-deploy deploy restart start stop status logs logs-live sync
 
-deploy:
+pre-deploy:
+	npm run format
+	npm run lint
+	npm run test
+	npm run coverage
+	npm run build
+	npm run ai:checklist
+
+deploy: pre-deploy
+	git add -A
+	git commit -m "Update" || true
+	git push
 	bash deploy/aif.sh
 
 start:

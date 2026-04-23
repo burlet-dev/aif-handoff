@@ -108,7 +108,7 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg sm:max-w-lg max-sm:mx-0 max-sm:w-full max-sm:max-w-full">
         <DialogClose onClose={() => onOpenChange(false)} />
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -154,7 +154,7 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
             {status && !statusLoading && (
               <>
                 {/* Changed files */}
-                <div className="max-h-48 overflow-y-auto border border-border">
+                <div className="max-h-48 max-sm:max-h-60 overflow-y-auto border border-border">
                   {totalChanges === 0 && (
                     <div className="px-3 py-3 text-xs text-muted-foreground">
                       Working tree clean
@@ -194,7 +194,7 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
 
                 {/* Commit form */}
                 {totalChanges > 0 && (
-                  <div className="flex gap-2">
+                  <div className="flex max-sm:flex-col gap-2">
                     <Input
                       placeholder="Commit message..."
                       value={commitMsg}
@@ -253,7 +253,7 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
 
         {/* Log Tab */}
         {tab === "log" && (
-          <div className="max-h-80 overflow-y-auto border border-border">
+          <div className="max-h-80 max-sm:max-h-[60vh] overflow-y-auto border border-border">
             {logLoading && (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -278,7 +278,7 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
 
         {/* Branches Tab */}
         {tab === "branches" && (
-          <div className="max-h-80 overflow-y-auto border border-border">
+          <div className="max-h-80 max-sm:max-h-[60vh] overflow-y-auto border border-border">
             {branchesLoading && (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
