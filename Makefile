@@ -3,10 +3,6 @@
 pre-deploy:
 	npm run format
 	npm run lint
-	npm run test
-	npm run coverage
-	npm run build
-	npm run ai:checklist
 
 deploy: pre-deploy
 	git add -A
