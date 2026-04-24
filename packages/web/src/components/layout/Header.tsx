@@ -330,7 +330,6 @@ export function Header({
         open={gitPanelOpen}
         onOpenChange={setGitPanelOpen}
         project={selectedProject}
-        selectedTaskId={selectedTaskId}
         initialCommitMsg={gitInitialCommitMsg}
       />
       {selectedProject && usageLimitsEnabled && (
