@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   GitBranch,
   GitCommitHorizontal,
@@ -9,6 +9,7 @@ import {
   FileCheck,
   Loader2,
   Upload,
+  ListTodo,
 } from "lucide-react";
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   useGitPush,
   useGitFetch,
 } from "@/hooks/useGitHub";
+import { useTasks } from "@/hooks/useTasks";
 import type { Project } from "@aif/shared/browser";
 
 interface Props {
@@ -57,6 +59,16 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
   const { data: branchData, isLoading: branchesLoading } = useGitBranches(
     open && tab === "branches" ? rootPath : null,
   );
+
+  const { data: tasks } = useTasks(open ? (project?.id ?? null) : null);
+  const activeTasks = useMemo(
+    () =>
+      (tasks ?? []).filter(
+        (t) => t.status !== "done" && t.status !== "verified" && t.status !== "backlog",
+      ),
+    [tasks],
+  );
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
 
   const gitPull = useGitPull();
   const gitPush = useGitPush();
@@ -229,6 +241,40 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
                 {/* Commit form */}
                 {totalChanges > 0 && (
                   <div className="space-y-2">
+                    {/* Task picker for commit message */}
+                    {activeTasks.length > 0 && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setTaskPickerOpen(!taskPickerOpen)}
+                          className="flex w-full items-center gap-1.5 border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent transition-colors"
+                        >
+                          <ListTodo className="h-3 w-3" />
+                          Use task title as commit message
+                          <ChevronDown className="ml-auto h-3 w-3" />
+                        </button>
+                        {taskPickerOpen && (
+                          <div className="absolute left-0 right-0 top-full z-10 mt-0.5 max-h-40 overflow-y-auto border border-border bg-popover">
+                            {activeTasks.map((t) => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => {
+                                  setCommitMsg(t.title);
+                                  setTaskPickerOpen(false);
+                                }}
+                                className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-accent"
+                              >
+                                <span className="truncate">{t.title}</span>
+                                <span className="ml-auto shrink-0 text-2xs text-muted-foreground">
+                                  {t.status}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <Input
                       placeholder="Commit message..."
                       value={commitMsg}
