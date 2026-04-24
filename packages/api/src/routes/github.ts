@@ -212,7 +212,31 @@ githubRouter.post("/log", jsonValidator(githubLogSchema), async (c) => {
   }
 });
 
-// POST /github/branches — list branches + current
+// POST /github/fetch — git fetch --all --prune
+githubRouter.post("/fetch", jsonValidator(githubPullSchema), async (c) => {
+  const { rootPath } = c.req.valid("json");
+
+  if (!existsSync(join(rootPath, ".git"))) {
+    return c.json({ error: "Not a git repository" }, 400);
+  }
+
+  try {
+    const { stdout, stderr } = await execFileAsync("git", ["fetch", "--all", "--prune"], {
+      cwd: rootPath,
+      timeout: EXEC_TIMEOUT_MS,
+    });
+
+    const output = (stdout + stderr).trim() || "Fetched";
+    log.info({ rootPath, output }, "Git fetch completed");
+    return c.json({ output });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error({ rootPath, err }, "Git fetch failed");
+    return c.json({ error: `Fetch failed: ${message}` }, 500);
+  }
+});
+
+// POST /github/branches — list local + remote branches + current
 githubRouter.post("/branches", jsonValidator(githubPullSchema), async (c) => {
   const { rootPath } = c.req.valid("json");
 
@@ -223,20 +247,36 @@ githubRouter.post("/branches", jsonValidator(githubPullSchema), async (c) => {
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["branch", "--format=%(refname:short)%09%(HEAD)"],
+      ["branch", "-a", "--format=%(refname:short)%09%(HEAD)"],
       { cwd: rootPath, timeout: 10_000 },
     );
 
     let current = "";
-    const branches: string[] = [];
+    const local: string[] = [];
+    const remote: string[] = [];
 
     for (const line of stdout.trim().split("\n").filter(Boolean)) {
       const [name, marker] = line.split("\t");
-      branches.push(name);
       if (marker === "*") current = name;
+
+      if (name.startsWith("origin/")) {
+        // Skip HEAD pointer and branches that already exist locally
+        if (name === "origin/HEAD") continue;
+        const shortName = name.slice("origin/".length);
+        if (!local.includes(shortName)) {
+          remote.push(shortName);
+        }
+      } else {
+        local.push(name);
+      }
     }
 
-    return c.json({ current, branches });
+    // Also add local branches that weren't added yet (in case of current branch detection)
+    if (current && !local.includes(current)) {
+      local.push(current);
+    }
+
+    return c.json({ current, branches: local, remote });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ rootPath, err }, "Git branches failed");
@@ -253,6 +293,7 @@ githubRouter.post("/checkout", jsonValidator(githubCheckoutSchema), async (c) =>
   }
 
   try {
+    // Try regular checkout first (works for local branches)
     await execFileAsync("git", ["checkout", branch], {
       cwd: rootPath,
       timeout: 30_000,
@@ -260,10 +301,21 @@ githubRouter.post("/checkout", jsonValidator(githubCheckoutSchema), async (c) =>
 
     log.info({ rootPath, branch }, "Branch switched");
     return c.json({ branch });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log.error({ rootPath, branch, err }, "Git checkout failed");
-    return c.json({ error: `Checkout failed: ${message}` }, 500);
+  } catch {
+    // If regular checkout fails, try creating a tracking branch from remote
+    try {
+      await execFileAsync("git", ["checkout", "-b", branch, `origin/${branch}`], {
+        cwd: rootPath,
+        timeout: 30_000,
+      });
+
+      log.info({ rootPath, branch }, "Created local tracking branch from remote");
+      return c.json({ branch });
+    } catch (err2) {
+      const message = err2 instanceof Error ? err2.message : String(err2);
+      log.error({ rootPath, branch, err: err2 }, "Git checkout failed");
+      return c.json({ error: `Checkout failed: ${message}` }, 500);
+    }
   }
 });
 

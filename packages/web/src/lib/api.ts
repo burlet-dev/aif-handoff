@@ -710,7 +710,17 @@ export const api = {
     });
   },
 
-  gitBranches(rootPath: string): Promise<{ current: string; branches: string[] }> {
+  gitFetch(rootPath: string): Promise<{ output: string }> {
+    console.debug("[api] POST /github/fetch", { rootPath });
+    return request("/github/fetch", {
+      method: "POST",
+      body: JSON.stringify({ rootPath }),
+    });
+  },
+
+  gitBranches(
+    rootPath: string,
+  ): Promise<{ current: string; branches: string[]; remote: string[] }> {
     return request("/github/branches", {
       method: "POST",
       body: JSON.stringify({ rootPath }),

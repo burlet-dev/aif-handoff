@@ -26,6 +26,7 @@ import {
   useGitCheckout,
   useGitCommit,
   useGitPull,
+  useGitFetch,
 } from "@/hooks/useGitHub";
 import type { Project } from "@aif/shared/browser";
 
@@ -56,6 +57,7 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
   );
 
   const gitPull = useGitPull();
+  const gitFetch = useGitFetch();
   const gitCheckout = useGitCheckout();
   const gitCommit = useGitCommit();
 
@@ -67,6 +69,14 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
         refetchStatus();
       },
       onError: (err) => toast(err instanceof Error ? err.message : "Pull failed", "error", 8000),
+    });
+  };
+
+  const handleFetch = () => {
+    if (!rootPath) return;
+    gitFetch.mutate(rootPath, {
+      onSuccess: (r) => toast(r.output || "Fetched", "success", 5000),
+      onError: (err) => toast(err instanceof Error ? err.message : "Fetch failed", "error", 8000),
     });
   };
 
@@ -278,29 +288,67 @@ export function GitPanel({ open, onOpenChange, project }: Props) {
 
         {/* Branches Tab */}
         {tab === "branches" && (
-          <div className="max-h-80 max-sm:max-h-[60vh] overflow-y-auto border border-border">
-            {branchesLoading && (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
-            )}
-            {branchData?.branches.map((branch) => (
-              <button
-                key={branch}
-                type="button"
-                disabled={branch === branchData.current || gitCheckout.isPending}
-                onClick={() => handleCheckout(branch)}
-                className={`flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent disabled:opacity-70 ${
-                  branch === branchData.current ? "bg-primary/10" : ""
-                }`}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFetch}
+                disabled={gitFetch.isPending}
+                className="gap-1 text-xs"
               >
-                <GitBranch className="h-3 w-3" />
-                <span className="font-mono text-xs">{branch}</span>
-                {branch === branchData.current && (
-                  <span className="ml-auto text-2xs text-primary">current</span>
+                {gitFetch.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
                 )}
-              </button>
-            ))}
+                Fetch
+              </Button>
+            </div>
+            <div className="max-h-72 max-sm:max-h-[55vh] overflow-y-auto border border-border">
+              {branchesLoading && (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {branchData?.branches.map((branch) => (
+                <button
+                  key={branch}
+                  type="button"
+                  disabled={branch === branchData.current || gitCheckout.isPending}
+                  onClick={() => handleCheckout(branch)}
+                  className={`flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent disabled:opacity-70 ${
+                    branch === branchData.current ? "bg-primary/10" : ""
+                  }`}
+                >
+                  <GitBranch className="h-3 w-3" />
+                  <span className="font-mono text-xs">{branch}</span>
+                  {branch === branchData.current && (
+                    <span className="ml-auto text-2xs text-primary">current</span>
+                  )}
+                </button>
+              ))}
+              {branchData?.remote && branchData.remote.length > 0 && (
+                <>
+                  <div className="border-b border-border bg-muted/50 px-3 py-1.5 text-2xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Remote
+                  </div>
+                  {branchData.remote.map((branch) => (
+                    <button
+                      key={`remote-${branch}`}
+                      type="button"
+                      disabled={gitCheckout.isPending}
+                      onClick={() => handleCheckout(branch)}
+                      className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent disabled:opacity-70"
+                    >
+                      <GitBranch className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-mono text-xs text-muted-foreground">{branch}</span>
+                      <span className="ml-auto text-2xs text-muted-foreground">origin</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
         )}
       </DialogContent>

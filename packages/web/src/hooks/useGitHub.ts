@@ -22,6 +22,17 @@ export function useGitPull() {
   });
 }
 
+export function useGitFetch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (rootPath: string) => api.gitFetch(rootPath),
+    onSuccess: (_, rootPath) => {
+      qc.invalidateQueries({ queryKey: ["git-branches", rootPath] });
+      qc.invalidateQueries({ queryKey: ["git-status", rootPath] });
+    },
+  });
+}
+
 export function useGitStatus(rootPath: string | null) {
   return useQuery({
     queryKey: ["git-status", rootPath],
