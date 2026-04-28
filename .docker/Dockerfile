@@ -33,7 +33,7 @@ RUN npx turbo build
 # ---- API ----
 FROM base AS api
 ENV NODE_ENV=production HOME=/home/node
-RUN apt-get update && apt-get install -y --no-install-recommends gosu git curl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends gosu git curl ca-certificates openssh-client \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update && apt-get install -y --no-install-recommends gh \
@@ -72,7 +72,7 @@ EXPOSE 80 443
 # ---- Agent ----
 FROM base AS agent
 ENV NODE_ENV=production HOME=/home/node
-RUN apt-get update && apt-get install -y --no-install-recommends gosu git curl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends gosu git curl ca-certificates openssh-client \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update && apt-get install -y --no-install-recommends gh \
@@ -85,8 +85,6 @@ COPY --chown=node:node --from=build /app/packages/runtime ./packages/runtime
 COPY --chown=node:node --from=build /app/packages/agent ./packages/agent
 COPY --chown=node:node package.json .
 COPY --chown=node:node .docker/docker-entrypoint.sh /usr/local/bin/
-COPY .docker/aif-codex-callback.sh /usr/local/bin/aif-codex-callback
-RUN chmod +x /usr/local/bin/aif-codex-callback
 RUN install -d -o node -g node /app /data /home/www
 EXPOSE 3010
 ENTRYPOINT ["docker-entrypoint.sh"]
@@ -95,7 +93,7 @@ CMD ["npx", "tsx", "packages/agent/src/index.ts"]
 # ---- MCP ----
 FROM base AS mcp
 ENV NODE_ENV=production HOME=/home/node
-RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu && rm -rf /var/lib/apt/lists/*
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
 COPY --chown=node:node --from=build /app/packages/data ./packages/data
