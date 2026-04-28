@@ -9,7 +9,7 @@ const persistRuntimeProfileLimitSnapshotMock = vi.fn();
 const clearRuntimeProfileLimitSnapshotMock = vi.fn();
 const notifyProjectRuntimeLimitBroadcastMock = vi.fn();
 const saveTaskSessionIdMock = vi.fn();
-const getTaskSessionIdMock = vi.fn(() => null);
+const getTaskSessionIdMock = vi.fn<(taskId: string) => string | null>(() => null);
 const codexStartThreadMock = vi.fn();
 const codexResumeThreadMock = vi.fn();
 const getAppDefaultRuntimeProfileIdMock = vi.fn<
