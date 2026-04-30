@@ -5,6 +5,8 @@ import type { RuntimeAdapter } from "@aif/runtime";
 const mockCreateChatSession = vi.fn();
 const mockFindChatSessionById = vi.fn();
 const mockListChatSessions = vi.fn();
+const mockListCodexSessionsByProjectRoot = vi.fn();
+const mockFindCodexSessionFilePathBySessionId = vi.fn();
 const mockUpdateChatSession = vi.fn();
 const mockDeleteChatSession = vi.fn();
 const mockListChatMessages = vi.fn();
@@ -21,10 +23,13 @@ const mockBroadcast = vi.fn();
 const mockResolveApiRuntimeContext = vi.fn();
 const mockGetApiRuntimeRegistry = vi.fn();
 const mockSessionCacheKey = vi.fn((..._args: unknown[]) => "runtime-cache");
+const mockShouldUseSessionCacheForRuntime = vi.fn(() => true);
 
 const mockListSessions = vi.fn();
 const mockGetSession = vi.fn();
 const mockListSessionEvents = vi.fn();
+const mockReadCodexSessionMetaFromFile = vi.fn();
+const mockReadCodexSessionEventsFromFile = vi.fn();
 
 const runtimeAdapter: RuntimeAdapter = {
   descriptor: {
@@ -53,6 +58,10 @@ vi.mock("@aif/data", () => ({
   createChatSession: (...args: unknown[]) => mockCreateChatSession(...args),
   findChatSessionById: (...args: unknown[]) => mockFindChatSessionById(...args),
   listChatSessions: (...args: unknown[]) => mockListChatSessions(...args),
+  listCodexSessionsByProjectRoot: (...args: unknown[]) =>
+    mockListCodexSessionsByProjectRoot(...args),
+  findCodexSessionFilePathBySessionId: (...args: unknown[]) =>
+    mockFindCodexSessionFilePathBySessionId(...args),
   updateChatSession: (...args: unknown[]) => mockUpdateChatSession(...args),
   deleteChatSession: (...args: unknown[]) => mockDeleteChatSession(...args),
   listChatMessages: (...args: unknown[]) => mockListChatMessages(...args),
@@ -67,6 +76,15 @@ vi.mock("@aif/data", () => ({
   toRuntimeProfileResponse: (row: Record<string, unknown>) => mockToRuntimeProfileResponse(row),
   createDbUsageSink: () => ({ record: vi.fn() }),
 }));
+vi.mock("@aif/runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@aif/runtime")>();
+  return {
+    ...actual,
+    readCodexSessionMetaFromFile: (...args: unknown[]) => mockReadCodexSessionMetaFromFile(...args),
+    readCodexSessionEventsFromFile: (...args: unknown[]) =>
+      mockReadCodexSessionEventsFromFile(...args),
+  };
+});
 
 vi.mock("../services/runtime.js", () => ({
   resolveApiRuntimeContext: (input: unknown) => mockResolveApiRuntimeContext(input),
@@ -84,7 +102,8 @@ vi.mock("../services/sessionCache.js", () => ({
   setCached: vi.fn(),
   invalidateCache: vi.fn(),
   invalidateAllSessionCaches: vi.fn(),
-  sessionCacheKey: (...args: unknown[]) => mockSessionCacheKey(...args),
+  sessionCacheKey: mockSessionCacheKey,
+  shouldUseSessionCacheForRuntime: mockShouldUseSessionCacheForRuntime,
 }));
 
 vi.mock("@aif/shared", async (importOriginal) => {
@@ -151,6 +170,11 @@ describe("chat session API", () => {
     mockListSessions.mockResolvedValue([]);
     mockGetSession.mockResolvedValue(null);
     mockListSessionEvents.mockResolvedValue([]);
+    mockListCodexSessionsByProjectRoot.mockReturnValue([]);
+    mockFindCodexSessionFilePathBySessionId.mockReturnValue(null);
+    mockReadCodexSessionMetaFromFile.mockResolvedValue(null);
+    mockReadCodexSessionEventsFromFile.mockResolvedValue([]);
+    mockShouldUseSessionCacheForRuntime.mockReturnValue(true);
     mockFindRuntimeProfileById.mockImplementation((id: string) =>
       id === "profile-1" ? { id, projectId: "proj-1" } : null,
     );
@@ -185,6 +209,58 @@ describe("chat session API", () => {
       expect(body.some((row: { id: string }) => row.id.startsWith("sdk:"))).toBe(true);
     });
 
+    it("uses runtime-prefixed ids for non-sdk session discovery and marks app-server as local source", async () => {
+      mockResolveApiRuntimeContext.mockResolvedValueOnce({
+        project: { id: "proj-1", rootPath: "/tmp/proj" },
+        adapter: runtimeAdapter,
+        resolvedProfile: {
+          source: "project_default",
+          profileId: "profile-codex-app-server",
+          runtimeId: "codex",
+          providerId: "openai",
+          transport: "app-server",
+          model: null,
+          baseUrl: null,
+          apiKey: null,
+          apiKeyEnvVar: null,
+          headers: {},
+          options: {},
+        },
+        selectionSource: "project_default",
+      });
+      mockListCodexSessionsByProjectRoot.mockReturnValue([
+        {
+          sessionId: "thread-123",
+          filePath: "/tmp/proj/.codex/sessions/thread-123.jsonl",
+          title: "Codex App Server Session",
+          projectRoot: "/tmp/proj",
+          accountFingerprint: "fp-1",
+          sourceCreatedAt: "2026-04-01T12:00:00Z",
+          sourceUpdatedAt: "2026-04-02T00:00:00Z",
+          messageCount: 2,
+          previewText: "Codex App Server Session",
+          sizeBytes: 100,
+          mtimeMs: 100,
+          lastIndexedAt: "2026-04-02T00:00:00Z",
+          createdAt: "2026-04-01T12:00:00Z",
+          updatedAt: "2026-04-02T00:00:00Z",
+        },
+      ]);
+
+      const res = await app.request("/chat/sessions?projectId=proj-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const runtimeSession = body.find((row: { id: string }) => row.id.includes("thread-123"));
+      expect(runtimeSession).toBeDefined();
+      expect(runtimeSession.id).toBe("runtime:codex:thread-123");
+      expect(runtimeSession.source).toBe("cli");
+      expect(mockListCodexSessionsByProjectRoot).toHaveBeenCalledWith({
+        projectRoot: "/tmp/proj",
+        limit: 50,
+      });
+      expect(mockListSessions).not.toHaveBeenCalled();
+    });
+
     it("filters out already linked runtime sessions", async () => {
       mockListChatSessions.mockReturnValue([
         { ...SESSION_ROW, runtimeSessionId: "runtime-linked" },
@@ -210,6 +286,54 @@ describe("chat session API", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toHaveLength(1);
+    });
+
+    it("uses indexed Codex sessions instead of adapter discovery", async () => {
+      mockResolveApiRuntimeContext.mockResolvedValueOnce({
+        project: { id: "proj-1", rootPath: "/tmp/proj" },
+        adapter: runtimeAdapter,
+        resolvedProfile: {
+          source: "project_default",
+          profileId: "profile-1",
+          runtimeId: "codex",
+          providerId: "openai",
+          transport: "sdk",
+          model: null,
+          baseUrl: null,
+          apiKey: null,
+          apiKeyEnvVar: null,
+          headers: {},
+          options: {},
+        },
+        selectionSource: "project_default",
+      });
+      mockListCodexSessionsByProjectRoot.mockReturnValue([
+        {
+          sessionId: "codex-abc",
+          filePath: "/tmp/proj/.codex/sessions/a.jsonl",
+          title: "Indexed Session",
+          projectRoot: "/tmp/proj",
+          accountFingerprint: "fp-1",
+          sourceCreatedAt: "2026-04-01T12:00:00Z",
+          sourceUpdatedAt: "2026-04-02T00:00:00Z",
+          messageCount: 2,
+          previewText: "Indexed preview",
+          sizeBytes: 100,
+          mtimeMs: 100,
+          lastIndexedAt: "2026-04-02T00:00:00Z",
+          createdAt: "2026-04-01T12:00:00Z",
+          updatedAt: "2026-04-02T00:00:00Z",
+        },
+      ]);
+
+      const res = await app.request("/chat/sessions?projectId=proj-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(
+        body.some((row: { runtimeSessionId: string }) => row.runtimeSessionId === "codex-abc"),
+      ).toBe(true);
+      expect(mockListSessions).not.toHaveBeenCalled();
+      expect(mockShouldUseSessionCacheForRuntime).not.toHaveBeenCalled();
     });
   });
 
@@ -311,6 +435,39 @@ describe("chat session API", () => {
       expect(body.title).toBe("Runtime Session");
     });
 
+    it("marks runtime-prefixed codex app-server sessions as local source", async () => {
+      mockFindRuntimeProfileById.mockReturnValue({
+        id: "profile-codex-app-server",
+        projectId: "proj-1",
+        name: "Codex App Server",
+        runtimeId: "codex",
+        providerId: "openai",
+        transport: "app-server",
+        baseUrl: null,
+        apiKeyEnvVar: "OPENAI_API_KEY",
+        defaultModel: "gpt-5.4",
+        headersJson: JSON.stringify({}),
+        optionsJson: JSON.stringify({}),
+        enabled: 1,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      });
+      mockGetSession.mockResolvedValue({
+        id: "thread-123",
+        title: "Codex App Server Session",
+        createdAt: "2026-04-01T00:00:00Z",
+        updatedAt: "2026-04-01T12:00:00Z",
+      });
+
+      const res = await app.request(
+        "/chat/sessions/runtime:codex:thread-123?projectId=proj-1&runtimeProfileId=profile-codex-app-server",
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe("runtime:codex:thread-123");
+      expect(body.source).toBe("cli");
+    });
+
     it("passes runtime profile context to virtual session lookup", async () => {
       mockFindRuntimeProfileById.mockReturnValue({
         id: "profile-claude",
@@ -345,6 +502,7 @@ describe("chat session API", () => {
           runtimeId: "claude",
           providerId: "anthropic",
           profileId: "profile-claude",
+          transport: "sdk",
           sessionId: "abc-123",
           options: expect.objectContaining({
             region: "us",
@@ -356,6 +514,25 @@ describe("chat session API", () => {
       );
       const body = await res.json();
       expect(body.runtimeProfileId).toBe("profile-claude");
+    });
+
+    it("loads Codex virtual session details from indexed file-path mapping", async () => {
+      mockFindCodexSessionFilePathBySessionId.mockReturnValue("/tmp/proj/.codex/sessions/a.jsonl");
+      mockReadCodexSessionMetaFromFile.mockResolvedValue({
+        id: "codex-idx-1",
+        prompt: "Indexed Codex Session",
+        createdAt: "2026-04-01T00:00:00Z",
+        updatedAt: "2026-04-01T12:00:00Z",
+        filePath: "/tmp/proj/.codex/sessions/a.jsonl",
+      });
+
+      const res = await app.request("/chat/sessions/runtime:codex:codex-idx-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe("runtime:codex:codex-idx-1");
+      expect(body.runtimeSessionId).toBe("codex-idx-1");
+      expect(body.title).toBe("Indexed Codex Session");
+      expect(mockGetSession).not.toHaveBeenCalled();
     });
   });
 
@@ -431,6 +608,7 @@ describe("chat session API", () => {
           runtimeId: "claude",
           providerId: "anthropic",
           profileId: "profile-claude",
+          transport: "sdk",
           sessionId: "abc-123",
           options: expect.objectContaining({
             region: "us",
@@ -596,6 +774,25 @@ describe("chat session API", () => {
           headers: { "x-custom": "1" },
         }),
       );
+    });
+
+    it("loads Codex virtual session messages from indexed file-path mapping", async () => {
+      mockFindCodexSessionFilePathBySessionId.mockReturnValue("/tmp/proj/.codex/sessions/a.jsonl");
+      mockReadCodexSessionEventsFromFile.mockResolvedValue([
+        {
+          type: "session-message",
+          timestamp: "2026-04-01T00:00:00Z",
+          message: "Indexed hello",
+          data: { role: "assistant", id: "idx-1" },
+        },
+      ]);
+
+      const res = await app.request("/chat/sessions/runtime:codex:codex-idx-1/messages");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
+      expect(body[0].content).toBe("Indexed hello");
+      expect(mockListSessionEvents).not.toHaveBeenCalled();
     });
   });
 

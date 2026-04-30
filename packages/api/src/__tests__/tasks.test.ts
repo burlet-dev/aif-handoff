@@ -1460,6 +1460,62 @@ describe("tasks API", () => {
       expect(res.status).toBe(404);
     });
 
+    it("should create and persist a feature branch when accepting an existing plan in a git repo with create_branches=true", async () => {
+      const db = testDb.current;
+      const { execFileSync } = await import("node:child_process");
+      const rootPath = mkdtempSync(join(tmpdir(), "aif-accept-branch-"));
+      execFileSync("git", ["init", "--initial-branch=main"], { cwd: rootPath, stdio: "ignore" });
+      execFileSync("git", ["config", "user.email", "t@t.local"], {
+        cwd: rootPath,
+        stdio: "ignore",
+      });
+      execFileSync("git", ["config", "user.name", "T"], { cwd: rootPath, stdio: "ignore" });
+      execFileSync("git", ["config", "commit.gpgsign", "false"], {
+        cwd: rootPath,
+        stdio: "ignore",
+      });
+      const aiFactoryDir = join(rootPath, ".ai-factory");
+      mkdirSync(aiFactoryDir, { recursive: true });
+      writeFileSync(join(aiFactoryDir, "PLAN.md"), "# Existing Plan\n\n- Step 1\n");
+      writeFileSync(join(rootPath, "README.md"), "# t\n");
+      execFileSync("git", ["add", "-A"], { cwd: rootPath, stdio: "ignore" });
+      execFileSync("git", ["commit", "-m", "init", "--no-verify"], {
+        cwd: rootPath,
+        stdio: "ignore",
+      });
+
+      db.insert(projects)
+        .values({ id: "proj-accept-branch", name: "Accept Branch", rootPath })
+        .run();
+      db.insert(tasks)
+        .values({
+          id: "ev-accept-branch-1",
+          projectId: "proj-accept-branch",
+          title: "Auto accept and branch",
+          status: "backlog",
+          autoMode: true,
+        })
+        .run();
+
+      const res = await app.request("/tasks/ev-accept-branch-1/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "accept_existing_plan" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("plan_ready");
+      expect(body.branchName).toMatch(/^feature\/auto-accept-and-branch-/);
+
+      // HEAD now on the task's feature branch
+      const current = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd: rootPath,
+        encoding: "utf8",
+      }).trim();
+      expect(current).toBe(body.branchName);
+    });
+
     it("should reject accept_existing_plan from non-backlog status", async () => {
       const db = testDb.current;
       db.insert(tasks)
@@ -1720,6 +1776,7 @@ describe("tasks API", () => {
         .run();
 
       mockRunApiRuntimeOneShot.mockClear();
+      vi.mocked(mockBroadcast).mockClear();
 
       const res = await app.request("/tasks/ev-commit-1/events", {
         method: "POST",
@@ -1730,21 +1787,23 @@ describe("tasks API", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.status).toBe("verified");
-      // query is fire-and-forget via dynamic import — wait for it to resolve
-      await new Promise((r) => setTimeout(r, 200));
-      expect(mockRunApiRuntimeOneShot).toHaveBeenCalled();
+      await vi.waitFor(
+        () => {
+          expect(mockRunApiRuntimeOneShot).toHaveBeenCalled();
+          const types = vi
+            .mocked(mockBroadcast)
+            .mock.calls.map((c) => (c[0] as { type: string }).type);
+          expect(types).toContain("task:commit_started");
+          expect(types).toContain("task:commit_done");
+        },
+        { timeout: 5_000 },
+      );
+
       const callArgs =
         mockRunApiRuntimeOneShot.mock.calls[mockRunApiRuntimeOneShot.mock.calls.length - 1][0];
       expect(callArgs.workflowKind).toBe("commit");
       expect(callArgs.fallbackSlashCommand).toBe("/aif-commit");
       expect(callArgs.prompt).toContain("git add -A");
-
-      const { broadcast } = await import("../ws.js");
-      const types = (
-        broadcast as unknown as { mock: { calls: Array<[{ type: string }]> } }
-      ).mock.calls.map((c) => c[0].type);
-      expect(types).toContain("task:commit_started");
-      expect(types).toContain("task:commit_done");
     });
 
     it("should broadcast task:commit_failed when runtime throws", async () => {
@@ -1761,8 +1820,7 @@ describe("tasks API", () => {
 
       mockRunApiRuntimeOneShot.mockClear();
       mockRunApiRuntimeOneShot.mockRejectedValueOnce(new Error("runtime boom"));
-      const { broadcast } = await import("../ws.js");
-      (broadcast as unknown as { mockClear: () => void }).mockClear();
+      vi.mocked(mockBroadcast).mockClear();
 
       const res = await app.request("/tasks/ev-commit-fail/events", {
         method: "POST",
@@ -1770,11 +1828,19 @@ describe("tasks API", () => {
         body: JSON.stringify({ event: "approve_done", commitOnApprove: true }),
       });
       expect(res.status).toBe(200);
-      await new Promise((r) => setTimeout(r, 200));
+      await vi.waitFor(
+        () => {
+          const types = vi
+            .mocked(mockBroadcast)
+            .mock.calls.map((c) => (c[0] as { type: string }).type);
+          expect(types).toContain("task:commit_failed");
+        },
+        { timeout: 5_000 },
+      );
 
-      const calls = (
-        broadcast as unknown as { mock: { calls: Array<[{ type: string; payload: unknown }]> } }
-      ).mock.calls;
+      const calls = vi.mocked(mockBroadcast).mock.calls as Array<
+        [{ type: string; payload: unknown }]
+      >;
       const failed = calls.find((c) => c[0].type === "task:commit_failed");
       expect(failed).toBeDefined();
       expect((failed![0].payload as { error?: string }).error).toBe("runtime boom");
@@ -1793,6 +1859,7 @@ describe("tasks API", () => {
         .run();
 
       mockRunApiRuntimeOneShot.mockClear();
+      vi.mocked(mockBroadcast).mockClear();
 
       const res = await app.request("/tasks/ev-commit-2/events", {
         method: "POST",
@@ -1801,8 +1868,12 @@ describe("tasks API", () => {
       });
 
       expect(res.status).toBe(200);
-      await new Promise((r) => setTimeout(r, 200));
+      await Promise.resolve();
       expect(mockRunApiRuntimeOneShot).not.toHaveBeenCalled();
+      const types = vi.mocked(mockBroadcast).mock.calls.map((c) => (c[0] as { type: string }).type);
+      expect(types).not.toContain("task:commit_started");
+      expect(types).not.toContain("task:commit_done");
+      expect(types).not.toContain("task:commit_failed");
     });
 
     it("should send done task to implementing with rework flag on request_changes", async () => {

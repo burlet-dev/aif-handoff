@@ -15,7 +15,7 @@ Auto-review is now convergence-aware. You can keep the default `full_re_review` 
 Use the runtime that fits your stack today, then switch per project/task without changing orchestration logic:
 
 - **Claude (`anthropic`)** — SDK, CLI, API transports
-- **Codex (`openai`)** — SDK, CLI, API transports
+- **Codex (`openai`)** — SDK, CLI, App Server, API transports
 - **OpenRouter (`openrouter`)** — API transport
 - **OpenCode (`opencode`)** — API transport
 
@@ -78,7 +78,7 @@ The agent coordinator reacts to task events via WebSocket in near real-time and 
   ```
   Copy the URL and open it in your browser. **Important:** the terminal wraps long URLs across lines — remove any line breaks and spaces before pasting, otherwise OAuth will fail with `invalid code_challenge`. Then restart to apply. Credentials are stored in a persistent `claude-auth` Docker volume.
 
-For Codex/OpenAI-compatible profiles, configure `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` (or set profile-level `apiKeyEnvVar` / `baseUrl`). See [Providers](docs/providers.md).
+For Codex/OpenAI-compatible profiles, configure `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` (or set profile-level `apiKeyEnvVar` / `baseUrl`). For local Codex runs without API keys, prefer `transport: "app-server"` or `transport: "cli"` and authenticate via `codex login`. See [Providers](docs/providers.md).
 
 #### Codex OAuth in Docker (without `OPENAI_API_KEY`)
 
@@ -184,18 +184,18 @@ AIF Handoff supports two execution modes, configurable globally via `AGENT_USE_S
 
 ## Tech Stack
 
-| Layer        | Technology                                                    |
-| ------------ | ------------------------------------------------------------- |
-| Runtime      | Node.js + TypeScript                                          |
-| Monorepo     | Turborepo                                                     |
-| Database     | SQLite (better-sqlite3 + drizzle-orm)                         |
-| API          | Hono + @hono/node-server + WebSocket                          |
-| Validation   | zod + @hono/zod-validator                                     |
-| Frontend     | React + Vite + TailwindCSS                                    |
-| Drag & Drop  | @dnd-kit                                                      |
-| Server State | @tanstack/react-query                                         |
-| Runtime SDKs | Pluggable adapters — Claude (Agent SDK) + Codex (CLI/SDK/API) |
-| Scheduler    | node-cron                                                     |
+| Layer        | Technology                                                               |
+| ------------ | ------------------------------------------------------------------------ |
+| Runtime      | Node.js + TypeScript                                                     |
+| Monorepo     | Turborepo                                                                |
+| Database     | SQLite (better-sqlite3 + drizzle-orm)                                    |
+| API          | Hono + @hono/node-server + WebSocket                                     |
+| Validation   | zod + @hono/zod-validator                                                |
+| Frontend     | React + Vite + TailwindCSS                                               |
+| Drag & Drop  | @dnd-kit                                                                 |
+| Server State | @tanstack/react-query                                                    |
+| Runtime SDKs | Pluggable adapters — Claude (Agent SDK) + Codex (CLI/SDK/App Server/API) |
+| Scheduler    | node-cron                                                                |
 
 ## Docker
 
@@ -219,18 +219,30 @@ Authentication: set `ANTHROPIC_API_KEY` in `.env`, or log in via `docker compose
 
 Only ports 80/443 are exposed. API is bound to localhost only. Includes security hardening (no-new-privileges, resource limits), healthchecks, log rotation, and automatic SSL via Let's Encrypt (ACME).
 
-| Variable            | Default      | Description                               |
-| ------------------- | ------------ | ----------------------------------------- |
-| `ANTHROPIC_API_KEY` | —            | API key (or use `claude login`)           |
-| `DOMAIN`            | `localhost`  | Domain for SSL certificate (ACME)         |
-| `PORT`              | `3009`       | Host port for API                         |
-| `MCP_PORT`          | `3100`       | Host port for MCP HTTP server (`1-65535`) |
-| `WEB_PORT`          | `5180`       | Host port for Web UI (dev)                |
-| `WEB_HOST`          | `localhost`  | Web UI dev server host (Vite)             |
-| `HTTP_PORT`         | `80`         | Host port for Web UI (production)         |
-| `HTTPS_PORT`        | `443`        | HTTPS port (production)                   |
-| `PROJECTS_DIR`      | `./projects` | Host directory for project files (dev)    |
-| `PROJECTS_MOUNT`    | `/home/www`  | Project files path inside containers      |
+| Variable             | Default      | Description                                                  |
+| -------------------- | ------------ | ------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`  | —            | API key (or use `claude login`)                              |
+| `DOMAIN`             | `localhost`  | Domain for SSL certificate (ACME)                            |
+| `PORT`               | `3009`       | Host port for API                                            |
+| `MCP_PORT`           | `3100`       | Host port for MCP HTTP server (`1-65535`)                    |
+| `WEB_PORT`           | `5180`       | Host port for Web UI (dev)                                   |
+| `WEB_HOST`           | `localhost`  | Web UI dev server host (Vite)                                |
+| `HTTP_PORT`          | `80`         | Host port for Web UI (production)                            |
+| `HTTPS_PORT`         | `443`        | HTTPS port (production)                                      |
+| `PROJECTS_DIR`       | `./projects` | Host directory for project files (dev)                       |
+| `PROJECTS_MOUNT`     | `/home/www`  | Project files path inside containers                         |
+| `PROJECTS_HOST_ROOT` | `${PWD}`     | Compose-internal repo root for relative `PROJECTS_DIR` (dev) |
+
+In the dev Compose setup, project roots are used by processes inside the
+containers. Host paths under `PROJECTS_DIR` are accepted in the UI and
+automatically saved as the matching `PROJECTS_MOUNT` path, so
+`/Users/me/projects/app` becomes `/home/www/app` with the default mount. If
+`PROJECTS_DIR` is relative, Compose resolves it from `PROJECTS_HOST_ROOT`; leave
+`PROJECTS_HOST_ROOT` unset unless you are replacing the compose wiring.
+
+Production Compose uses a named Docker volume at `PROJECTS_MOUNT` instead of
+the dev bind mount. Create and select projects by their in-container path in
+production, for example `/home/www/app`.
 
 A `.devcontainer/` config is also included for JetBrains / VS Code.
 

@@ -51,6 +51,10 @@ export function ProjectSelector({ selectedId, onSelect, onDeselect }: Props) {
   const deleteProject = useDeleteProject();
   const setAutoQueue = useSetAutoQueueMode();
   const { toast } = useToast();
+
+  const showMutationError = (error: unknown, fallback: string) => {
+    toast(error instanceof Error ? error.message : fallback, "error", 8000);
+  };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>("create");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -176,17 +180,18 @@ export function ProjectSelector({ selectedId, onSelect, onDeselect }: Props) {
         {
           onSuccess: (project) => {
             if (autoQueueMode) {
-              setAutoQueue.mutate({ id: project.id, enabled: true });
+              setAutoQueue.mutate(
+                { id: project.id, enabled: true },
+                {
+                  onError: (error) => showMutationError(error, "Failed to enable auto-queue mode"),
+                },
+              );
             }
             onSelect(project);
             setDialogOpen(false);
           },
           onError: (error) => {
-            toast(
-              error instanceof Error ? error.message : "Failed to create project",
-              "error",
-              8000,
-            );
+            showMutationError(error, "Failed to create project");
           },
         },
       );
@@ -211,10 +216,18 @@ export function ProjectSelector({ selectedId, onSelect, onDeselect }: Props) {
         {
           onSuccess: (project) => {
             if (autoQueueMode !== previousAutoQueue) {
-              setAutoQueue.mutate({ id: editingId, enabled: autoQueueMode });
+              setAutoQueue.mutate(
+                { id: editingId, enabled: autoQueueMode },
+                {
+                  onError: (error) => showMutationError(error, "Failed to update auto-queue mode"),
+                },
+              );
             }
             if (selectedId === editingId) onSelect(project);
             setDialogOpen(false);
+          },
+          onError: (error) => {
+            showMutationError(error, "Failed to update project");
           },
         },
       );
@@ -340,7 +353,8 @@ export function ProjectSelector({ selectedId, onSelect, onDeselect }: Props) {
                 className="font-mono text-sm"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Absolute path where agents will create files
+                Absolute path where agents will create files. In Docker, host paths under
+                PROJECTS_DIR are saved as the mounted container path.
               </p>
             </div>
             <div>

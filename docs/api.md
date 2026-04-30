@@ -171,6 +171,11 @@ PUT /projects/:id
 
 **Response:** `200 OK` — the updated project object.
 
+**Errors:**
+
+- `400` — Parallel auto-queue is rejected when the project config has `git.create_branches=true`.
+  Disable parallel execution, disable auto-queue mode, or set `git.create_branches=false` before using both modes together.
+
 ### Check Roadmap Status
 
 ```
@@ -277,6 +282,11 @@ clients can update their board indicator.
 { "enabled": true }
 ```
 
+**Errors:**
+
+- `400` — Parallel auto-queue is rejected when the project config has `git.create_branches=true`.
+  Disable parallel execution, disable auto-queue mode, or set `git.create_branches=false` before using both modes together.
+
 ### Get Project MCP Config
 
 ```
@@ -341,6 +351,7 @@ Used by API/agent services to trigger project-scoped WebSocket broadcasts withou
 ## Runtime Profiles
 
 Runtime profiles carry non-secret transport/model config plus the latest persisted runtime-limit snapshot used by API, agent, and UI surfaces.
+For local Codex runtimes (`runtimeId=codex` with `sdk`/`cli` transport), `/runtime-profiles` and `/runtime-profiles/effective/*` now read limit overlays from the SQLite Codex index (`codex_limit_heads`) maintained by the background API indexer. Request handlers do not perform direct `~/.codex/sessions` scans.
 
 ### List Runtime Profiles
 
@@ -367,6 +378,7 @@ GET /runtime-profiles/effective/chat/:projectId
 ```
 
 Both responses include the resolved `profile` object (or `null`) plus source metadata. When a profile is present, its payload includes `runtimeLimitSnapshot` and `runtimeLimitUpdatedAt`.
+If no indexed Codex head is available for the resolved account/project scope, the response falls back to the persisted profile snapshot.
 
 ### Runtime Limit Snapshot Shape
 
@@ -672,6 +684,7 @@ GET /runtime-profiles
 
 `scope=project` requires `projectId`. `scope=global` returns only reusable profiles (`projectId = null`).
 `scope=visible` is the default when omitted.
+For local Codex profiles, this endpoint overlays the response from indexed Codex limit heads in SQLite instead of scanning `~/.codex/sessions` during request handling.
 
 ### Effective Runtime Resolution
 
@@ -874,6 +887,7 @@ DELETE /chat/sessions/:id
 ```
 
 Chat sessions persist the runtime profile chosen when the session starts. This keeps older conversations tied to the runtime they were created with even if the project's current default changes later.
+For local Codex runtimes, session discovery uses the indexed `codex_sessions` read-model. Session detail/message reads resolve `sessionId -> filePath` from the same index before compatibility fallback to runtime-adapter lookups.
 
 `POST` and `PUT` accept `runtimeProfileId` as an optional field. The value must be either a global profile or one owned by the same project.
 
