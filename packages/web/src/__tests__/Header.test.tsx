@@ -59,6 +59,14 @@ vi.mock("@/components/layout/GlobalSettingsDialog", () => ({
   GlobalSettingsDialog: () => null,
 }));
 
+vi.mock("@/hooks/useTasks", () => ({
+  useTasks: () => ({ data: [], isLoading: false }),
+}));
+
+vi.mock("@/components/project/GitPanel", () => ({
+  GitPanel: () => null,
+}));
+
 const { Header } = await import("@/components/layout/Header");
 
 const project: Project = {

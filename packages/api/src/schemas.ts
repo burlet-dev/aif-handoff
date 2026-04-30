@@ -266,7 +266,7 @@ export const codexCallbackSchema = z
   })
   .superRefine((value, ctx) => {
     const env = getEnv();
-    const expectedPort = env.AIF_CODEX_LOGIN_LOOPBACK_PORT;
+    const expectedPort = env.AIF_CODEX_LOGIN_BROKER_PORT;
     let parsed: URL;
     try {
       parsed = new URL(value.url);
