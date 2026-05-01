@@ -43,6 +43,10 @@
       "cache": false,
       "persistent": true
     },
+    "dev:perf": {
+      "cache": false,
+      "persistent": true
+    },
     "test": {
       "dependsOn": ["^build"]
     },
