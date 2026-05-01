@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalPassThroughEnv": [
+    "AIF_RUNTIME_SESSION_FORK_ENABLED",
     "AIF_USAGE_LIMITS_ENABLED",
     "AIF_ENABLE_CODEX_LOGIN_PROXY",
     "AIF_RUNTIME_MODULES",
