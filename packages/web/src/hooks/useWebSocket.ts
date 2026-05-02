@@ -45,6 +45,10 @@ function patchTaskStatusCaches(
   );
 }
 
+function hasWarmupPayload(value: unknown): value is { projectId: string; status?: string } {
+  return isRecord(value) && typeof value.projectId === "string";
+}
+
 function invalidateRuntimeLimitQueries(
   queryClient: QueryClient,
   payload: { projectId: string; taskId?: string | null },
@@ -229,6 +233,12 @@ export function useWebSocket() {
         if (typeof data.payload.taskId === "string" && data.payload.taskId.length > 0) {
           pendingTaskIds.current.add(data.payload.taskId);
         }
+        return;
+      }
+
+      if (data.type === "project:warmup_updated" && hasWarmupPayload(data.payload)) {
+        queryClient.invalidateQueries({ queryKey: ["projectWarmup", data.payload.projectId] });
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
         return;
       }
 

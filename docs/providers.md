@@ -59,15 +59,15 @@ The API exposes effective selection endpoints:
 
 ## Supported Runtimes
 
-| Runtime      | Provider     | Transports                | Resume                   | Sessions             | Agent Defs    | Native Subagents | Isolated Fallback | Usage Reporting                          | Light Model         | Status                    |
-| ------------ | ------------ | ------------------------- | ------------------------ | -------------------- | ------------- | ---------------- | ----------------- | ---------------------------------------- | ------------------- | ------------------------- |
-| `claude`     | `anthropic`  | SDK, CLI, API             | Yes (SDK/CLI)            | Yes (SDK/CLI)        | Yes (SDK/CLI) | No               | No                | `FULL` (all transports)                  | `claude-haiku-3-5`  | Built-in                  |
-| `codex`      | `openai`     | SDK, CLI, App Server, API | Yes (SDK/CLI/App Server) | Yes (SDK/App Server) | No            | SDK only         | SDK only          | `FULL` SDK/API, `PARTIAL` CLI/App Server | default             | Built-in                  |
-| `opencode`   | `opencode`   | API                       | Yes                      | Yes                  | No            | No               | No                | `NONE`                                   | null (configurable) | Built-in                  |
-| `openrouter` | `openrouter` | API                       | No                       | No                   | No            | No               | No                | `FULL`                                   | null (configurable) | Built-in                  |
-| Custom       | Any          | Any                       | Configurable             | Configurable         | Configurable  | Configurable     | Configurable      | Must declare                             | Configurable        | Via `AIF_RUNTIME_MODULES` |
+| Runtime      | Provider     | Transports                | Resume                   | Session Fork     | Sessions             | Agent Defs    | Native Subagents | Isolated Fallback | Usage Reporting                          | Light Model         | Status                    |
+| ------------ | ------------ | ------------------------- | ------------------------ | ---------------- | -------------------- | ------------- | ---------------- | ----------------- | ---------------------------------------- | ------------------- | ------------------------- |
+| `claude`     | `anthropic`  | SDK, CLI, API             | Yes (SDK/CLI)            | Yes (SDK/CLI)    | Yes (SDK/CLI)        | Yes (SDK/CLI) | No               | No                | `FULL` (all transports)                  | `claude-haiku-3-5`  | Built-in                  |
+| `codex`      | `openai`     | SDK, CLI, App Server, API | Yes (SDK/CLI/App Server) | Yes (App Server) | Yes (SDK/App Server) | No            | SDK only         | SDK only          | `FULL` SDK/API, `PARTIAL` CLI/App Server | default             | Built-in                  |
+| `opencode`   | `opencode`   | API                       | Yes                      | No               | Yes                  | No            | No               | No                | `NONE`                                   | null (configurable) | Built-in                  |
+| `openrouter` | `openrouter` | API                       | No                       | No               | No                   | No            | No               | No                | `FULL`                                   | null (configurable) | Built-in                  |
+| Custom       | Any          | Any                       | Configurable             | Configurable     | Configurable         | Configurable  | Configurable     | Configurable      | Must declare                             | Configurable        | Via `AIF_RUNTIME_MODULES` |
 
-Capabilities are **transport-aware**: the same adapter may expose different capabilities depending on the selected transport. For example, Codex supports resume on SDK/CLI/App Server, while session discovery remains SDK/App Server-only. Use `resolveAdapterCapabilities(adapter, transport)` to get the effective set.
+Capabilities are **transport-aware**: the same adapter may expose different capabilities depending on the selected transport. For example, Codex supports resume on SDK/CLI/App Server, session fork only on App Server, and session discovery on SDK/App Server. Use `resolveAdapterCapabilities(adapter, transport)` to get the effective set.
 
 ### Runtime-limit observability
 
@@ -461,6 +461,7 @@ Permission handling:
 Runtime descriptors declare capability flags:
 
 - `supportsResume`
+- `supportsSessionFork`
 - `supportsSessionList`
 - `supportsAgentDefinitions`
 - `supportsStreaming`
@@ -469,6 +470,8 @@ Runtime descriptors declare capability flags:
 - `supportsCustomEndpoint`
 - `supportsNativeSubagentWorkflows`
 - `supportsIsolatedSubagentWorkflows`
+
+`supportsSessionFork` gates adapters that can create a child session from a reusable source session. Warmup flows use this capability and must call the optional `forkSession()` method instead of resuming the source session directly. The capability is also behind the off-by-default `AIF_RUNTIME_SESSION_FORK_ENABLED=false` rollout flag; fork-capable transports expose `supportsSessionFork=true` only when that flag is enabled.
 
 Additionally, `RuntimeExecutionIntent` supports `outputSchema` for structured JSON output (passed to adapters that support it, e.g. Codex SDK).
 
@@ -499,7 +502,7 @@ Set `AIF_RUNTIME_MODULES` to a comma-separated list of module specifiers. Each m
 Minimal module shape:
 
 ```ts
-import type { RuntimeAdapter } from "@aif/runtime";
+import { UsageReporting, type RuntimeAdapter } from "@aif/runtime";
 
 const adapter: RuntimeAdapter = {
   descriptor: {
@@ -508,6 +511,7 @@ const adapter: RuntimeAdapter = {
     displayName: "My Runtime",
     capabilities: {
       supportsResume: false,
+      supportsSessionFork: false,
       supportsSessionList: false,
       supportsAgentDefinitions: false,
       supportsStreaming: true,
@@ -515,6 +519,8 @@ const adapter: RuntimeAdapter = {
       supportsApprovals: false,
       supportsCustomEndpoint: true,
       supportsIsolatedSubagentWorkflows: false,
+      supportsNativeSubagentWorkflows: false,
+      usageReporting: UsageReporting.NONE,
     },
   },
   async run(input) {

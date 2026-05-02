@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node --watch --import tsx src/index.ts",
     "dev:serve": "node --import tsx src/index.ts",
+    "dev:perf": "node --import tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.ts",
     "test": "vitest run --configLoader runner",

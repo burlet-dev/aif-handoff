@@ -1,3 +1,4 @@
+import { resetEnvCache } from "@aif/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_USAGE_CONTEXT } from "./helpers/usageContext.js";
 import { UsageReporting } from "../types.js";
@@ -85,6 +86,8 @@ function createRunInput(overrides: Record<string, unknown> = {}) {
 
 describe("Codex runtime adapter", () => {
   beforeEach(() => {
+    delete process.env.AIF_RUNTIME_SESSION_FORK_ENABLED;
+    resetEnvCache();
     runCodexCliMock.mockReset();
     runCodexAgentApiMock.mockReset();
     runCodexSdkMock.mockReset();
@@ -139,6 +142,7 @@ describe("Codex runtime adapter", () => {
     expect(adapter.descriptor.capabilities.supportsIsolatedSubagentWorkflows).toBe(false);
     expect(adapter.descriptor.capabilities.supportsNativeSubagentWorkflows).toBe(false);
     expect(adapter.descriptor.capabilities.usageReporting).toBe(UsageReporting.PARTIAL);
+    expect(adapter.descriptor.capabilities.supportsSessionFork).toBe(false);
     expect(adapter.descriptor.capabilities.supportsSessionList).toBe(false);
     expect(adapter.descriptor.skillCommandPrefix).toBe("$");
     expect(adapter.descriptor.supportsProjectInit).toBe(true);
@@ -156,6 +160,26 @@ describe("Codex runtime adapter", () => {
     expect(adapter.getEffectiveCapabilities!("api").supportsIsolatedSubagentWorkflows).toBe(false);
     expect(adapter.getEffectiveCapabilities!("api").supportsNativeSubagentWorkflows).toBe(false);
     expect(adapter.getEffectiveCapabilities!("api").usageReporting).toBe(UsageReporting.FULL);
+  });
+
+  it("keeps session fork support disabled until the rollout flag is enabled", () => {
+    const adapter = createCodexRuntimeAdapter();
+
+    expect(adapter.getEffectiveCapabilities!("cli").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("sdk").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("api").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("app-server").supportsSessionFork).toBe(false);
+  });
+
+  it("reports session fork support for app-server transport when the rollout flag is enabled", () => {
+    process.env.AIF_RUNTIME_SESSION_FORK_ENABLED = "true";
+    resetEnvCache();
+    const adapter = createCodexRuntimeAdapter();
+
+    expect(adapter.getEffectiveCapabilities!("cli").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("sdk").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("api").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("app-server").supportsSessionFork).toBe(true);
   });
 
   it("runs via CLI transport by default", async () => {
@@ -238,6 +262,44 @@ describe("Codex runtime adapter", () => {
     expect(runCodexAgentApiMock).toHaveBeenCalledTimes(1);
     const callInput = runCodexAgentApiMock.mock.calls[0][0] as { resume?: boolean };
     expect(callInput.resume).toBe(true);
+  });
+
+  it("forks sessions only through app-server transport", async () => {
+    const adapter = createCodexRuntimeAdapter();
+    const result = await adapter.forkSession!({
+      ...createRunInput({
+        transport: "app-server",
+      }),
+      sourceSessionId: "thread-warm-source",
+    } as any);
+
+    expect(result.outputText).toBe("app-server-output");
+    expect(runCodexAppServerMock).toHaveBeenCalledTimes(1);
+    const callInput = runCodexAppServerMock.mock.calls[0][0] as {
+      transport?: string;
+      sourceSessionId?: string;
+      sessionId?: string;
+      resume?: boolean;
+    };
+    expect(callInput.transport).toBe("app-server");
+    expect(callInput.sourceSessionId).toBe("thread-warm-source");
+    expect(callInput.sessionId).toBeUndefined();
+    expect(callInput.resume).toBeUndefined();
+  });
+
+  it("rejects fork requests for unsupported Codex transports", async () => {
+    const adapter = createCodexRuntimeAdapter();
+
+    await expect(
+      adapter.forkSession!({
+        ...createRunInput({
+          transport: "cli",
+        }),
+        sourceSessionId: "thread-warm-source",
+      } as any),
+    ).rejects.toThrow("does not support session fork");
+    expect(runCodexCliMock).not.toHaveBeenCalled();
+    expect(runCodexAppServerMock).not.toHaveBeenCalled();
   });
 
   it("validates connection via API validation when transport is legacy 'agentapi'", async () => {

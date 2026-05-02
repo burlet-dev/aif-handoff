@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { getEnv } from "@aif/shared";
 import { getCodexMcpStatus, installCodexMcpServer, uninstallCodexMcpServer } from "./mcp.js";
 import { initCodexProject } from "./project.js";
 import {
@@ -12,12 +13,14 @@ import {
   type RuntimeModelListInput,
   type RuntimeRunInput,
   type RuntimeRunResult,
+  type RuntimeSessionForkInput,
   type RuntimeSessionListInput,
   type RuntimeSessionGetInput,
   type RuntimeSessionEventsInput,
   type RuntimeSession,
   type RuntimeEvent,
 } from "../../types.js";
+import { RuntimeCapabilityError, RuntimeExecutionError } from "../../errors.js";
 import { runCodexCli, probeCodexCli, type CodexCliLogger } from "./cli.js";
 import {
   listCodexAgentApiModels,
@@ -81,6 +84,11 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function sessionIdSuffix(sessionId: string | null | undefined): string | null {
+  if (!sessionId) return null;
+  return sessionId.length <= 8 ? sessionId : sessionId.slice(-8);
+}
+
 type TransportResolutionSource = "input.transport" | "options.transport" | "default";
 
 interface TransportResolution {
@@ -102,6 +110,7 @@ interface TransportResolution {
 
 const CLI_CAPABILITIES: RuntimeCapabilities = {
   supportsResume: true,
+  supportsSessionFork: false,
   supportsSessionList: false,
   supportsAgentDefinitions: false,
   supportsStreaming: true,
@@ -118,6 +127,7 @@ const CLI_CAPABILITIES: RuntimeCapabilities = {
 
 const SDK_CAPABILITIES: RuntimeCapabilities = {
   supportsResume: true,
+  supportsSessionFork: false,
   supportsSessionList: true,
   supportsAgentDefinitions: false,
   supportsStreaming: true,
@@ -131,6 +141,7 @@ const SDK_CAPABILITIES: RuntimeCapabilities = {
 
 const API_CAPABILITIES: RuntimeCapabilities = {
   supportsResume: false,
+  supportsSessionFork: false,
   supportsSessionList: false,
   supportsAgentDefinitions: false,
   supportsStreaming: true,
@@ -144,6 +155,7 @@ const API_CAPABILITIES: RuntimeCapabilities = {
 
 const APP_SERVER_CAPABILITIES: RuntimeCapabilities = {
   supportsResume: true,
+  supportsSessionFork: true,
   supportsSessionList: true,
   supportsAgentDefinitions: false,
   supportsStreaming: true,
@@ -152,6 +164,13 @@ const APP_SERVER_CAPABILITIES: RuntimeCapabilities = {
   supportsCustomEndpoint: true,
   usageReporting: UsageReporting.PARTIAL,
 };
+
+function withSessionForkRolloutGate(capabilities: RuntimeCapabilities): RuntimeCapabilities {
+  if (getEnv().AIF_RUNTIME_SESSION_FORK_ENABLED || !capabilities.supportsSessionFork) {
+    return capabilities;
+  }
+  return { ...capabilities, supportsSessionFork: false };
+}
 
 function resolveTransport(input: {
   transport?: string;
@@ -459,6 +478,72 @@ export function createCodexRuntimeAdapter(
     return runCodexCli({ ...input, transport }, logger);
   }
 
+  async function forkByTransport(input: RuntimeSessionForkInput): Promise<RuntimeRunResult> {
+    const transportResolution = resolveTransport({
+      transport: input.transport,
+      options: input.options,
+    });
+    const transport = transportResolution.transport;
+
+    if (transport !== RuntimeTransport.APP_SERVER) {
+      logger.warn?.(
+        {
+          runtimeId,
+          profileId: input.profileId ?? null,
+          transport,
+          requestedTransport: transportResolution.requested,
+          sourceSessionIdSuffix: sessionIdSuffix(input.sourceSessionId),
+          skipReason: "unsupported_transport",
+        },
+        "WARN [runtime:codex] Session fork requested for unsupported transport",
+      );
+      throw new RuntimeCapabilityError(
+        `Codex ${transport} transport does not support session fork`,
+      );
+    }
+
+    logger.debug?.(
+      {
+        runtimeId,
+        profileId: input.profileId ?? null,
+        transport,
+        sourceSessionIdSuffix: sessionIdSuffix(input.sourceSessionId),
+      },
+      "DEBUG [runtime:codex] Starting Codex session fork run",
+    );
+
+    try {
+      const result = await runCodexAppServer({ ...input, transport }, logger);
+      logger.debug?.(
+        {
+          runtimeId,
+          profileId: input.profileId ?? null,
+          transport,
+          sourceSessionIdSuffix: sessionIdSuffix(input.sourceSessionId),
+          childSessionIdSuffix: sessionIdSuffix(result.sessionId ?? result.session?.id ?? null),
+        },
+        "DEBUG [runtime:codex] Codex session fork run completed",
+      );
+      return result;
+    } catch (error) {
+      const classified =
+        error instanceof RuntimeExecutionError ? error : classifyCodexRuntimeError(error);
+      logger.error?.(
+        {
+          runtimeId,
+          profileId: input.profileId ?? null,
+          transport,
+          sourceSessionIdSuffix: sessionIdSuffix(input.sourceSessionId),
+          category: classified.category,
+          adapterCode: classified.adapterCode ?? null,
+          error: classified.message,
+        },
+        "ERROR [runtime:codex] Codex session fork run failed",
+      );
+      throw classified;
+    }
+  }
+
   return {
     descriptor: {
       id: runtimeId,
@@ -486,7 +571,7 @@ export function createCodexRuntimeAdapter(
         case RuntimeTransport.SDK:
           return SDK_CAPABILITIES;
         case RuntimeTransport.APP_SERVER:
-          return APP_SERVER_CAPABILITIES;
+          return withSessionForkRolloutGate(APP_SERVER_CAPABILITIES);
         case RuntimeTransport.API:
           return API_CAPABILITIES;
         default:
@@ -508,6 +593,10 @@ export function createCodexRuntimeAdapter(
       } catch (error) {
         throw classifyCodexRuntimeError(error);
       }
+    },
+
+    async forkSession(input: RuntimeSessionForkInput): Promise<RuntimeRunResult> {
+      return await forkByTransport(input);
     },
 
     async listSessions(input: RuntimeSessionListInput): Promise<RuntimeSession[]> {
