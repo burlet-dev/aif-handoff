@@ -13,6 +13,21 @@ export const CODEX_SUBAGENT_STRATEGIES = {
 export type CodexSubagentStrategy =
   (typeof CODEX_SUBAGENT_STRATEGIES)[keyof typeof CODEX_SUBAGENT_STRATEGIES];
 
+export type CodexSubagentStrategyResolutionReason =
+  | "non_codex"
+  | "default_native"
+  | "explicit_native"
+  | "explicit_isolated"
+  | "invalid_fallback"
+  | "disabled_by_env";
+
+export interface CodexSubagentStrategyResolution {
+  strategy: CodexSubagentStrategy | null;
+  reason: CodexSubagentStrategyResolutionReason;
+  configuredValue?: string;
+  nativeSubagentsEnabled: boolean;
+}
+
 const CODEX_NATIVE_AGENT_FILES = [
   "best-practices-sidecar.toml",
   "commit-preparer.toml",
@@ -33,16 +48,50 @@ export interface CodexNativeSubagentReadiness {
 export function resolveCodexSubagentStrategy(
   runtimeId: string,
   runtimeOptions?: Record<string, unknown>,
-): CodexSubagentStrategy | null {
-  if (runtimeId !== "codex") return null;
+  options?: { nativeSubagentsEnabled?: boolean },
+): CodexSubagentStrategyResolution {
+  if (runtimeId !== "codex") {
+    return {
+      strategy: null,
+      reason: "non_codex",
+      nativeSubagentsEnabled: false,
+    };
+  }
+
   const configured = readString(asRecord(runtimeOptions)[CODEX_SUBAGENT_STRATEGY_OPTION]);
-  if (!configured || configured === CODEX_SUBAGENT_STRATEGIES.native) {
-    return CODEX_SUBAGENT_STRATEGIES.native;
-  }
   if (configured === CODEX_SUBAGENT_STRATEGIES.isolated) {
-    return CODEX_SUBAGENT_STRATEGIES.isolated;
+    return {
+      strategy: CODEX_SUBAGENT_STRATEGIES.isolated,
+      reason: "explicit_isolated",
+      configuredValue: configured,
+      nativeSubagentsEnabled: Boolean(options?.nativeSubagentsEnabled),
+    };
   }
-  return CODEX_SUBAGENT_STRATEGIES.isolated;
+
+  if (configured && configured !== CODEX_SUBAGENT_STRATEGIES.native) {
+    return {
+      strategy: CODEX_SUBAGENT_STRATEGIES.isolated,
+      reason: "invalid_fallback",
+      configuredValue: configured,
+      nativeSubagentsEnabled: Boolean(options?.nativeSubagentsEnabled),
+    };
+  }
+
+  if (!options?.nativeSubagentsEnabled) {
+    return {
+      strategy: CODEX_SUBAGENT_STRATEGIES.isolated,
+      reason: "disabled_by_env",
+      configuredValue: configured ?? undefined,
+      nativeSubagentsEnabled: false,
+    };
+  }
+
+  return {
+    strategy: CODEX_SUBAGENT_STRATEGIES.native,
+    reason: configured ? "explicit_native" : "default_native",
+    configuredValue: configured ?? undefined,
+    nativeSubagentsEnabled: true,
+  };
 }
 
 export function resolveCodexNativeSubagentReadiness(

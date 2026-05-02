@@ -148,6 +148,7 @@ const baseMockEnv = {
   AGENT_FIRST_ACTIVITY_TIMEOUT_MS: 60_000,
   AIF_USAGE_LIMITS_ENABLED: true,
   AIF_WARMUP_ENABLED: false,
+  AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED: false,
   TELEGRAM_BOT_TOKEN: undefined,
   TELEGRAM_USER_ID: undefined,
 };
@@ -1608,9 +1609,11 @@ describe("executeSubagentQuery codex native subagent mode", () => {
     resolveEffectiveRuntimeProfileMock.mockReset();
     codexStartThreadMock.mockReset();
     codexResumeThreadMock.mockReset();
+    delete mockEnvOverrides.AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED;
   });
 
-  it("uses native Codex orchestration prompt by default and skips session persistence", async () => {
+  it("uses native Codex orchestration prompt when enabled and skips session persistence", async () => {
+    mockEnvOverrides.AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED = true;
     const projectRoot = createCodexNativeAssetsProjectRoot();
     getTaskSessionIdMock.mockReturnValue("persisted-session");
     findTaskByIdMock.mockReturnValue({
@@ -1744,7 +1747,8 @@ describe("executeSubagentQuery codex native subagent mode", () => {
     expect(passedPrompt).not.toContain("Use Codex native subagents for this workflow.");
   });
 
-  it("falls back to isolated Codex skill-session mode when native assets are missing", async () => {
+  it("falls back to isolated Codex skill-session mode when enabled native assets are missing", async () => {
+    mockEnvOverrides.AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED = true;
     findTaskByIdMock.mockReturnValue({
       id: "task-codex-native-missing-assets",
       projectId: "project-1",
@@ -1808,7 +1812,8 @@ describe("executeSubagentQuery codex native subagent mode", () => {
     expect(passedPrompt).not.toContain("Use Codex native subagents for this workflow.");
   });
 
-  it("falls back to isolated Codex skill-session mode for an upgraded project without native assets", async () => {
+  it("falls back to isolated Codex skill-session mode for an enabled upgraded project without native assets", async () => {
+    mockEnvOverrides.AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED = true;
     const projectRoot = mkdtempSync("/tmp/aif-codex-upgraded-old-assets-");
     mkdirSync(join(projectRoot, ".ai-factory"), { recursive: true });
     writeFileSync(

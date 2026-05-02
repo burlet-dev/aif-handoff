@@ -58,6 +58,11 @@ export function createRuntimeWorkflowSpec(input: RuntimeWorkflowSpecInput): Runt
       `Workflow ${input.workflowKind} requested isolated_skill_session without fallbackSlashCommand`,
     );
   }
+  if (requestedExecutionMode === "native_subagents" && !input.agentDefinitionName) {
+    throw new Error(
+      `Workflow ${input.workflowKind} requested native_subagents without agentDefinitionName`,
+    );
+  }
   const executionMode: RuntimeWorkflowExecutionMode =
     requestedExecutionMode === "isolated_skill_session"
       ? "isolated_skill_session"

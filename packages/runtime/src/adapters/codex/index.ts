@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { getEnv } from "@aif/shared";
+import { asRecord, readString } from "../../utils.js";
 import { getCodexMcpStatus, installCodexMcpServer, uninstallCodexMcpServer } from "./mcp.js";
 import { initCodexProject } from "./project.js";
 import {
@@ -72,16 +73,6 @@ function createFallbackLogger(): CodexRuntimeAdapterLogger {
       console.error("ERROR [runtime:codex]", message, context);
     },
   };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function sessionIdSuffix(sessionId: string | null | undefined): string | null {

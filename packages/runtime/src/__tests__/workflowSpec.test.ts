@@ -146,6 +146,7 @@ describe("runtime workflow spec + prompt policy", () => {
       capabilities: CODEX_CAPABILITIES,
       runtimeOptions: { codexSubagentStrategy: "native" },
       workflow,
+      codexNativeSubagentsEnabled: true,
     });
 
     expect(resolved.usedNativeSubagentWorkflow).toBe(true);
@@ -224,7 +225,51 @@ describe("runtime workflow spec + prompt policy", () => {
     ]);
   });
 
-  it("defaults Codex native_subagents requests to native orchestration when no strategy override is set", () => {
+  it("falls back to isolated skill-command mode when Codex native subagents are disabled by feature flag", () => {
+    const projectRoot = createCodexNativeAssetsProjectRoot();
+    const warnings: Array<{ context: Record<string, unknown>; message: string }> = [];
+    const workflow = createRuntimeWorkflowSpec({
+      workflowKind: "implementer",
+      prompt: "Implement this feature",
+      agentDefinitionName: "implement-coordinator",
+      fallbackSlashCommand: "/aif-implement @.ai-factory/PLAN.md",
+      fallbackStrategy: "slash_command",
+      executionMode: "native_subagents",
+      requiredCapabilities: ["supportsAgentDefinitions"],
+    });
+
+    const resolved = resolveRuntimePromptPolicy({
+      runtimeId: "codex",
+      projectRoot,
+      capabilities: CODEX_CAPABILITIES,
+      runtimeOptions: {},
+      workflow,
+      logger: {
+        warn(context, message) {
+          warnings.push({ context, message });
+        },
+      },
+    });
+
+    expect(resolved.usedNativeSubagentWorkflow).toBe(false);
+    expect(resolved.usedIsolatedSkillCommand).toBe(true);
+    expect(resolved.usedFallbackSlashCommand).toBe(false);
+    expect(resolved.nativeSubagentFallbackReason).toBe("disabled_by_env");
+    expect(resolved.prompt).toContain("/aif-implement @.ai-factory/PLAN.md");
+    expect(warnings).toEqual([
+      {
+        context: {
+          runtimeId: "codex",
+          workflowKind: "implementer",
+          featureFlag: "AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED",
+        },
+        message:
+          "Native Codex subagents disabled by feature flag; falling back to isolated skill-session execution",
+      },
+    ]);
+  });
+
+  it("defaults Codex native_subagents requests to native orchestration when feature flag is enabled", () => {
     const projectRoot = createCodexNativeAssetsProjectRoot();
     const workflow = createRuntimeWorkflowSpec({
       workflowKind: "implementer",
@@ -242,6 +287,7 @@ describe("runtime workflow spec + prompt policy", () => {
       capabilities: CODEX_CAPABILITIES,
       runtimeOptions: {},
       workflow,
+      codexNativeSubagentsEnabled: true,
     });
 
     expect(resolved.usedNativeSubagentWorkflow).toBe(true);
@@ -267,6 +313,7 @@ describe("runtime workflow spec + prompt policy", () => {
       capabilities: CODEX_CAPABILITIES,
       runtimeOptions: {},
       workflow,
+      codexNativeSubagentsEnabled: true,
     });
 
     expect(resolved.usedNativeSubagentWorkflow).toBe(false);
@@ -361,6 +408,17 @@ describe("runtime workflow spec + prompt policy", () => {
         executionMode: "isolated_skill_session",
       }),
     ).toThrow(/isolated_skill_session without fallbackSlashCommand/i);
+  });
+
+  it("throws when native subagent mode is requested without an agent definition name", () => {
+    expect(() =>
+      createRuntimeWorkflowSpec({
+        workflowKind: "implementer",
+        prompt: "Implement this feature",
+        fallbackSlashCommand: "/aif-implement",
+        executionMode: "native_subagents",
+      }),
+    ).toThrow(/native_subagents without agentDefinitionName/i);
   });
 
   it("defaults fallbackStrategy to slash_command when slash command is provided", () => {

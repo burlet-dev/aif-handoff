@@ -218,12 +218,12 @@ SDK-specific options:
 - `sandboxMode` — one of `read-only`, `workspace-write`, `danger-full-access`
 - `approvalPolicy` — one of `untrusted`, `on-failure`, `on-request`, `never`
 - `modelReasoningEffort` — one of `minimal`, `low`, `medium`, `high`, `xhigh`
-- `codexSubagentStrategy` — `native` (default when required `.codex` assets are present) or `isolated`; use `isolated` as an escape hatch when you need the legacy fresh-session skill workflow instead of native Codex agents
+- `codexSubagentStrategy` — `native` or `isolated`; native Codex subagents are additionally gated by `AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED=true` and required `.codex` assets on disk. Leave unset or use `isolated` to keep the legacy fresh-session skill workflow.
 - `skipGitRepoCheck` — bypass the Codex guard that refuses to run outside a git repo (SDK, App Server, and CLI)
 
-> Migration note: older releases defaulted `codexSubagentStrategy` to `isolated`.
-> If you relied on the isolated skill-session path, set `codexSubagentStrategy: "isolated"` explicitly after upgrading.
-> If the project was bootstrapped before AI Factory `2.9.3`, Handoff now checks for materialized `.codex/agents/*.toml` and `.codex/config.toml` before using the native path and automatically falls back to `isolated` until `ai-factory init --agents claude,codex` is re-run.
+> Migration note: native Codex subagents are off by default until operators opt in with `AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED=true`.
+> If the flag is disabled, Handoff falls back to the isolated skill-session path even when `codexSubagentStrategy: "native"` is configured.
+> If the project was bootstrapped before the AI Factory release containing `ai-factory#70`, Handoff checks for materialized `.codex/agents/*.toml` and `.codex/config.toml` before using the native path and automatically falls back to `isolated` until AI Factory is upgraded and `ai-factory init --agents claude,codex` is re-run.
 
 Invalid `options.approvalPolicy` / `options.sandboxMode` values are ignored with a runtime warning, and the adapter falls back to the effective default for that execution path.
 
