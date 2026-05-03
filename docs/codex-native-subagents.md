@@ -22,6 +22,12 @@ This must materialize:
 - `.codex/agents/*.toml`
 - `.codex/config.toml`
 
+The runtime readiness guard in AIF Handoff intentionally keeps an explicit list of
+required `.codex/agents/*.toml` files. Treat that list as a contract with the AI
+Factory-managed assets from PR `#70`: if AI Factory adds, removes, or renames a
+managed Codex agent file, update the Handoff readiness list in the same release
+train so projects do not falsely downgrade to isolated mode.
+
 ## Runtime Behavior
 
 Default behavior after this change:

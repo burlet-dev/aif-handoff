@@ -27,24 +27,6 @@ function hasRuntimeLimitPayload(
   return isRecord(value) && typeof value.projectId === "string";
 }
 
-function patchTaskStatusCaches(
-  queryClient: QueryClient,
-  task: Pick<Task, "id" | "title" | "status">,
-): void {
-  queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (tasks) => {
-    if (!tasks?.some((cachedTask) => cachedTask.id === task.id)) return tasks;
-    return tasks.map((cachedTask) =>
-      cachedTask.id === task.id
-        ? { ...cachedTask, title: task.title, status: task.status }
-        : cachedTask,
-    );
-  });
-
-  queryClient.setQueryData<Task>(["task", task.id], (cachedTask) =>
-    cachedTask ? { ...cachedTask, title: task.title, status: task.status } : cachedTask,
-  );
-}
-
 function hasWarmupPayload(value: unknown): value is { projectId: string; status?: string } {
   return isRecord(value) && typeof value.projectId === "string";
 }
@@ -185,7 +167,6 @@ export function useWebSocket() {
         const cachedStatus = statusCacheRef.current.get(movedTask.id);
         const previousStatus = cachedStatus ?? findTaskStatusInCache(movedTask.id);
         statusCacheRef.current.set(movedTask.id, movedTask.status);
-        patchTaskStatusCaches(queryClient, movedTask);
 
         if (previousStatus && previousStatus !== movedTask.status) {
           if (settingsRef.current.desktop) {
@@ -206,10 +187,6 @@ export function useWebSocket() {
             });
           }
         }
-      }
-
-      if (data.type === "task:updated" && isTaskPayload(data.payload)) {
-        patchTaskStatusCaches(queryClient, data.payload);
       }
 
       // Activity-only update: refresh task detail without touching the board list

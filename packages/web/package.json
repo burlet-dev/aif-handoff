@@ -7,7 +7,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:serve": "vite",
     "dev:perf": "vite",
     "build": "tsc -b && vite build --configLoader native",
     "preview": "vite preview",

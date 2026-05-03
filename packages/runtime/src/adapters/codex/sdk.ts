@@ -51,6 +51,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
+
 function formatToolDetail(value: unknown, maxLength = 200): string {
   if (value == null) return "";
 
@@ -69,6 +70,7 @@ function formatToolDetail(value: unknown, maxLength = 200): string {
 
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
+
 const ALLOWED_ENV_PREFIXES = [
   "OPENAI_",
   "CODEX_",
