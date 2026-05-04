@@ -171,10 +171,9 @@ PUT /projects/:id
 
 **Response:** `200 OK` — the updated project object.
 
-**Errors:**
-
-- `400` — Parallel auto-queue is rejected when the project config has `git.create_branches=true`.
-  Disable parallel execution, disable auto-queue mode, or set `git.create_branches=false` before using both modes together.
+Parallel auto-queue with `git.create_branches=true` requires
+`AIF_TASK_WORKTREES_ENABLED=true`. With the default `false`, the API rejects
+that combination and the coordinator keeps branch-isolated projects serial.
 
 ### Check Roadmap Status
 
@@ -282,10 +281,170 @@ clients can update their board indicator.
 { "enabled": true }
 ```
 
+Parallel auto-queue with `git.create_branches=true` requires
+`AIF_TASK_WORKTREES_ENABLED=true`. Queued full-mode tasks then receive isolated
+git worktrees when planning starts.
+
+### Get Project Warmup State
+
+```
+GET /projects/:id/warmup
+```
+
+Returns the feature flag state, warmup support metadata for the project's
+effective planner, implementer, and review runtimes, and active ready warmup
+sessions if they exist. The response never includes raw seed session ids.
+
+**Response:** `200 OK`
+
+```json
+{
+  "enabled": true,
+  "support": {
+    "supported": true,
+    "skipReason": null,
+    "workflowKind": "planner",
+    "profileMode": "plan",
+    "runtimeId": "claude",
+    "providerId": "anthropic",
+    "runtimeProfileId": "profile-1",
+    "transport": "sdk",
+    "model": "claude-sonnet-4",
+    "selectionSource": "project_default"
+  },
+  "targets": [
+    {
+      "supported": true,
+      "skipReason": null,
+      "workflowKind": "planner",
+      "profileMode": "plan",
+      "runtimeId": "claude",
+      "providerId": "anthropic",
+      "runtimeProfileId": "profile-1",
+      "transport": "sdk",
+      "model": "claude-sonnet-4",
+      "selectionSource": "project_default"
+    }
+  ],
+  "warmup": {
+    "id": "warmup-1",
+    "projectId": "project-1",
+    "runtimeProfileId": "profile-1",
+    "runtimeId": "claude",
+    "providerId": "anthropic",
+    "transport": "sdk",
+    "model": "claude-sonnet-4",
+    "status": "ready",
+    "ttlSeconds": 3600,
+    "expiresAt": "2026-04-30T12:00:00.000Z",
+    "remainingSeconds": 2400,
+    "summary": "Warmup summary",
+    "errorMessage": null,
+    "createdAt": "2026-04-30T11:00:00.000Z",
+    "updatedAt": "2026-04-30T11:00:10.000Z"
+  },
+  "warmups": [
+    {
+      "id": "warmup-1",
+      "projectId": "project-1",
+      "runtimeProfileId": "profile-1",
+      "runtimeId": "claude",
+      "providerId": "anthropic",
+      "transport": "sdk",
+      "model": "claude-sonnet-4",
+      "status": "ready",
+      "ttlSeconds": 3600,
+      "expiresAt": "2026-04-30T12:00:00.000Z",
+      "remainingSeconds": 2400,
+      "summary": "Warmup summary",
+      "errorMessage": null,
+      "createdAt": "2026-04-30T11:00:00.000Z",
+      "updatedAt": "2026-04-30T11:00:10.000Z"
+    }
+  ]
+}
+```
+
+### Create Project Warmup
+
+```
+POST /projects/:id/warmup
+```
+
+Creates reusable seed sessions for each distinct effective warmup-capable
+planner, implementer, and review runtime. Requires `AIF_WARMUP_ENABLED=true`
+and a runtime transport that advertises session fork support. TTL is bounded to
+60–86400 seconds.
+
+**Body:**
+
+```json
+{ "ttlSeconds": 3600 }
+```
+
+**Response:** `201 Created`
+
+Returns the same shape as `GET /projects/:id/warmup`.
+
+If at least one target warmup is created successfully and a later target fails,
+the endpoint returns `207 Multi-Status` with the active successful or previously
+ready warmups instead of treating the whole request as a cold failure:
+
+```json
+{
+  "error": "Runtime failed while creating warmup",
+  "code": "partial_warmup_failed",
+  "failedTarget": "implementer",
+  "partial": true,
+  "warmup": {
+    "id": "warmup-failed",
+    "status": "failed"
+  },
+  "warmups": [
+    {
+      "id": "warmup-ready",
+      "status": "ready"
+    }
+  ],
+  "support": {
+    "supported": true,
+    "workflowKind": "planner"
+  },
+  "targets": []
+}
+```
+
+Clients should treat `warmups` in a partial response as usable for the listed
+targets and retry only the failed/missing target instead of assuming all warmups
+were discarded.
+
 **Errors:**
 
-- `400` — Parallel auto-queue is rejected when the project config has `git.create_branches=true`.
-  Disable parallel execution, disable auto-queue mode, or set `git.create_branches=false` before using both modes together.
+- `400` — invalid TTL.
+- `403` — warmup feature flag is disabled.
+- `404` — project not found.
+- `409` — none of the effective warmup target runtimes support session fork.
+- `502` — runtime execution failed or did not return a seed session id.
+- `207` — partial success; at least one target warmup remains active while another target failed.
+
+**WebSocket event:** `project:warmup_updated` with `{ projectId, status }`.
+
+### Clear Project Warmup
+
+```
+DELETE /projects/:id/warmup
+```
+
+Clears active warmup rows for the project's current effective warmup target
+runtimes.
+
+**Response:** `200 OK`
+
+```json
+{ "success": true, "cleared": 1 }
+```
+
+**WebSocket event:** `project:warmup_updated` when at least one row is cleared.
 
 ### Get Project MCP Config
 
@@ -976,6 +1135,7 @@ All events are JSON with this structure:
 | `project:auto_queue_mode_changed` | Full project object                                                                                | `PATCH /projects/:id/auto-queue-mode`                                                |
 | `project:auto_queue_advanced`     | `{ id: string }` (task id)                                                                         | Coordinator auto-advances the next backlog task in an auto-queue project             |
 | `project:runtime_limit_updated`   | `{ projectId, runtimeProfileId, taskId? }`                                                         | Persisted runtime-profile limit state or last usage changed                          |
+| `project:warmup_updated`          | `{ projectId, status }`                                                                            | Warmup create/delete/failure changed project warmup state                            |
 
 ### Connection
 
@@ -985,6 +1145,7 @@ Runtime-limit invalidation is project-scoped:
 
 - `project:runtime_limit_updated` payload is `{ projectId, runtimeProfileId, taskId? }`, and `runtimeProfileId` is required at emission time.
 - API/agent callers emit this via `POST /projects/:id/broadcast` after runtime snapshot/usage updates.
+- `project:warmup_updated` payload is `{ projectId, status }`, where `status` is `ready`, `failed`, `partial`, `cleared`, or `expired`.
 
 ## MCP Sync Integration
 

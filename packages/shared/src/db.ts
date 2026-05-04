@@ -119,6 +119,7 @@ function ensureTables(sqlite: Database.Database): void {
       locked_until TEXT,
       scheduled_at TEXT,
       branch_name TEXT,
+      worktree_path TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     )
@@ -193,6 +194,25 @@ function ensureTables(sqlite: Database.Database): void {
       total_tokens INTEGER NOT NULL DEFAULT 0,
       cost_usd REAL,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    )
+  `);
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_warmup_sessions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      runtime_profile_id TEXT,
+      runtime_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      transport TEXT,
+      model TEXT,
+      source_session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'creating',
+      ttl_seconds INTEGER NOT NULL,
+      expires_at TEXT NOT NULL,
+      summary TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     )
   `);
   sqlite.exec(`
@@ -648,6 +668,34 @@ const MIGRATIONS: Migration[] = [
       "Persist feature branch name per task so HANDOFF_MODE auto-queue can route implementer back to the right branch",
     sql: "ALTER TABLE tasks ADD COLUMN branch_name TEXT",
   },
+  {
+    version: 20,
+    description: "Persist per-task git worktree path for parallel auto-queue isolation",
+    sql: "ALTER TABLE tasks ADD COLUMN worktree_path TEXT",
+  },
+  {
+    version: 21,
+    description: "Add runtime warmup session persistence",
+    sql: `
+      CREATE TABLE IF NOT EXISTS runtime_warmup_sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        runtime_profile_id TEXT,
+        runtime_id TEXT NOT NULL,
+        provider_id TEXT NOT NULL,
+        transport TEXT,
+        model TEXT,
+        source_session_id TEXT,
+        status TEXT NOT NULL DEFAULT 'creating',
+        ttl_seconds INTEGER NOT NULL,
+        expires_at TEXT NOT NULL,
+        summary TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      );
+    `,
+  },
 ];
 
 function splitSqlStatements(sqlText: string): string[] {
@@ -905,6 +953,9 @@ function ensureIndexes(sqlite: Database.Database): void {
     "CREATE INDEX IF NOT EXISTS idx_usage_events_chat_session ON usage_events(chat_session_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_usage_events_source ON usage_events(source, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_usage_events_runtime ON usage_events(runtime_id, provider_id, created_at)",
+    // Runtime warmup lookup and lifecycle scans.
+    "CREATE INDEX IF NOT EXISTS idx_runtime_warmup_active_lookup ON runtime_warmup_sessions(project_id, runtime_profile_id, runtime_id, provider_id, transport, model, status, expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_runtime_warmup_expires ON runtime_warmup_sessions(status, expires_at)",
     // Codex index: project session listing and session detail lookup.
     "CREATE INDEX IF NOT EXISTS idx_codex_sessions_project_root_updated ON codex_sessions(project_root, source_updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_codex_sessions_file_path ON codex_sessions(file_path)",
