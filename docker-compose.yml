@@ -19,6 +19,7 @@ services:
       - PROJECTS_DIR=${PROJECTS_DIR:-${PWD}/projects}
       - PROJECTS_HOST_ROOT=${PWD}
       - PROJECTS_MOUNT=${PROJECTS_MOUNT:-/home/www}
+      - TMPDIR=/home/node/.claude/tmp
     volumes:
       - db-data:/data
       - ${PROJECTS_DIR:-${PWD}/projects}:${PROJECTS_MOUNT:-/home/www}
@@ -61,6 +62,7 @@ services:
       - PROJECTS_DIR=${PROJECTS_DIR:-${PWD}/projects}
       - PROJECTS_HOST_ROOT=${PWD}
       - PROJECTS_MOUNT=${PROJECTS_MOUNT:-/home/www}
+      - TMPDIR=/home/node/.claude/tmp
     expose:
       - "3010"
     volumes:

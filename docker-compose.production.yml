@@ -17,6 +17,7 @@ services:
       - LOG_LEVEL=info
       # Codex OAuth login proxy is dev-only. Production should rely on OPENAI_API_KEY.
       - AIF_ENABLE_CODEX_LOGIN_PROXY=false
+      - TMPDIR=/home/node/.claude/tmp
     volumes:
       - db-data:/data
       - projects:${PROJECTS_MOUNT:-/home/www}
@@ -113,6 +114,7 @@ services:
       - LOG_LEVEL=info
       # Codex OAuth login proxy is dev-only. Production should rely on OPENAI_API_KEY.
       - AIF_ENABLE_CODEX_LOGIN_PROXY=false
+      - TMPDIR=/home/node/.claude/tmp
     volumes:
       - db-data:/data
       - projects:${PROJECTS_MOUNT:-/home/www}
