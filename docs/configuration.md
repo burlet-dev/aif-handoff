@@ -88,7 +88,7 @@ Runtime profiles support provider-specific auth setup. Each adapter resolves cre
 
 1. **Claude adapter (SDK transport):** uses credentials from `~/.claude/` or `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`.
 2. **Codex adapter (CLI transport):** uses `OPENAI_API_KEY` (plus `OPENAI_BASE_URL` for custom endpoint).
-3. **Codex adapter (App Server transport):** uses `OPENAI_API_KEY`/`codex login` auth and local `codex app-server` stdio execution.
+3. **Codex adapter (SDK/App Server transports):** uses `OPENAI_API_KEY`/`codex login` auth and local installed Codex CLI execution (`CODEX_CLI_PATH` or `codex` from `PATH`).
 4. **Codex adapter (API transport):** uses `OPENAI_API_KEY` + `OPENAI_BASE_URL` for remote execution.
 5. **OpenRouter adapter (API transport):** uses `OPENROUTER_API_KEY` + `OPENROUTER_BASE_URL` (defaults to `https://openrouter.ai/api/v1`). Models use `provider/model` format.
 6. **Custom adapters:** loaded via `AIF_RUNTIME_MODULES`, each adapter resolves its own env vars.
@@ -97,7 +97,7 @@ The default runtime can be changed via `AIF_DEFAULT_RUNTIME_ID` and `AIF_DEFAULT
 
 Optional runtime defaults:
 
-- `CODEX_CLI_PATH` for Codex CLI/App Server transport adapters. For App Server on Windows, use a real executable path or safe shim name only; shell metacharacters are rejected before spawn.
+- `CODEX_CLI_PATH` for Codex CLI/SDK/App Server transport adapters. `options.codexCliPath` has priority, then `CODEX_CLI_PATH`, then `codex` from `PATH`. For App Server on Windows, use a real executable path or safe shim name only; shell metacharacters are rejected before spawn.
 - `AIF_RUNTIME_MODULES` for loading additional runtime modules at startup (`registerRuntimeModule(registry)`)
 - `API_RUNTIME_START_TIMEOUT_MS` / `API_RUNTIME_RUN_TIMEOUT_MS` for API one-shot runtime calls
 - `MCP_PORT` must be a valid integer port (`1-65535`) anywhere HTTP MCP mode is enabled. `npm run dev` and `POST /settings/mcp/install` ignore invalid values and fall back to non-HTTP behavior; the standalone MCP HTTP server fails fast on invalid configuration.
