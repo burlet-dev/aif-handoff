@@ -8,6 +8,7 @@ import {
   validateOpenCodeApiConnection,
 } from "../adapters/opencode/api.js";
 import { OpenCodeRuntimeAdapterError } from "../adapters/opencode/errors.js";
+import { resetEnvCache } from "@aif/shared";
 import { TEST_USAGE_CONTEXT } from "./helpers/usageContext.js";
 
 function createRunInput(overrides: Record<string, unknown> = {}) {
@@ -42,14 +43,16 @@ describe("OpenCode API transport", () => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
     vi.unstubAllEnvs();
+    resetEnvCache();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    resetEnvCache();
   });
 
-  it("creates session, posts message, and returns output", async () => {
+  it("creates session, posts message, and returns output without long-running dispatcher by default", async () => {
     fetchMock
       .mockResolvedValueOnce(
         jsonResponse({
@@ -81,7 +84,7 @@ describe("OpenCode API transport", () => {
       true,
     );
     expect(requestInitAt(0).dispatcher).toBeUndefined();
-    expect(requestInitAt(1).dispatcher).toBeDefined();
+    expect(requestInitAt(1).dispatcher).toBeUndefined();
 
     const postBody = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body)) as {
       model: { providerID: string; modelID: string };
@@ -94,6 +97,29 @@ describe("OpenCode API transport", () => {
     expect(result.outputText).toBe("Hello from OpenCode");
     expect(result.sessionId).toBe("session-1");
     expect(events).toHaveLength(1);
+  });
+
+  it("uses long-running dispatcher for session messages when feature flag is enabled", async () => {
+    vi.stubEnv("AIF_RUNTIME_OPENCODE_LONG_RUNNING_DISPATCHER_ENABLED", "true");
+    resetEnvCache();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "session-flag",
+          time: { created: 1710000000, updated: 1710000001 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          info: { id: "message-flag", role: "assistant", time: 1710000002 },
+          parts: [{ type: "text", text: "flagged" }],
+        }),
+      );
+
+    await runOpenCodeApi(createRunInput());
+
+    expect(requestInitAt(0).dispatcher).toBeUndefined();
+    expect(requestInitAt(1).dispatcher).toBeDefined();
   });
 
   it("uses existing session when sessionId is provided", async () => {

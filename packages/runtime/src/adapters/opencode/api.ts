@@ -11,7 +11,7 @@ import type {
   RuntimeSessionGetInput,
   RuntimeSessionListInput,
 } from "../../types.js";
-import { redactProviderText } from "@aif/shared";
+import { getEnv, redactProviderText } from "@aif/shared";
 import { Agent, type Dispatcher } from "undici";
 import { classifyOpenCodeRuntimeError, OpenCodeRuntimeAdapterError } from "./errors.js";
 
@@ -326,7 +326,7 @@ async function requestJson<T>(
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     };
-    if (options.longRunning) {
+    if (options.longRunning && getEnv().AIF_RUNTIME_OPENCODE_LONG_RUNNING_DISPATCHER_ENABLED) {
       requestInit.dispatcher = getLongRunningOpenCodeDispatcher();
     }
 
