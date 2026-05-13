@@ -10,6 +10,8 @@ const clearRuntimeProfileLimitSnapshotMock = vi.fn();
 const notifyProjectRuntimeLimitBroadcastMock = vi.fn();
 const saveTaskSessionIdMock = vi.fn();
 const getTaskSessionIdMock = vi.fn<(taskId: string) => string | null>(() => null);
+const saveTaskActiveRuntimeSelectionMock = vi.fn();
+const getTaskActiveRuntimeSelectionMock = vi.fn<() => Record<string, unknown> | null>(() => null);
 const codexStartThreadMock = vi.fn();
 const codexResumeThreadMock = vi.fn();
 const expireStaleRuntimeWarmupSessionsMock = vi.fn(() => 0);
@@ -41,6 +43,7 @@ const getAppDefaultRuntimeProfileIdMock = vi.fn<
 interface MockTaskRow {
   id: string;
   projectId: string;
+  status?: string;
   runtimeOptionsJson: string | null;
   modelOverride: string | null;
   branchName?: string | null;
@@ -103,6 +106,8 @@ vi.mock("@aif/data", async (importOriginal) => {
     updateTaskHeartbeat: vi.fn(),
     renewTaskClaim: vi.fn(),
     persistRuntimeProfileLimitSnapshot: persistRuntimeProfileLimitSnapshotMock,
+    saveTaskActiveRuntimeSelection: saveTaskActiveRuntimeSelectionMock,
+    getTaskActiveRuntimeSelection: getTaskActiveRuntimeSelectionMock,
     saveTaskSessionId: saveTaskSessionIdMock,
     getTaskSessionId: getTaskSessionIdMock,
     expireStaleRuntimeWarmupSessions: expireStaleRuntimeWarmupSessionsMock,
@@ -194,6 +199,9 @@ const { RuntimeExecutionError, createRuntimeWorkflowSpec } = await import("@aif/
 const { executeSubagentQuery, resolveAdapterForTask } = await import("../subagentQuery.js");
 
 beforeEach(() => {
+  saveTaskActiveRuntimeSelectionMock.mockReset();
+  getTaskActiveRuntimeSelectionMock.mockReset();
+  getTaskActiveRuntimeSelectionMock.mockReturnValue(null);
   expireStaleRuntimeWarmupSessionsMock.mockReset();
   expireStaleRuntimeWarmupSessionsMock.mockReturnValue(0);
   findActiveReadyRuntimeWarmupSessionMock.mockReset();
@@ -1443,6 +1451,7 @@ describe("executeSubagentQuery model fallback policy", () => {
     findTaskByIdMock.mockReturnValue({
       id: "task-1",
       projectId: "project-1",
+      status: "implementing",
       runtimeOptionsJson: null,
       modelOverride: null,
     });
@@ -1458,6 +1467,69 @@ describe("executeSubagentQuery model fallback policy", () => {
 
     const callOptions = queryMock.mock.calls[0][0].options as Record<string, unknown>;
     expect(callOptions.model).toBe("profile-model");
+    expect(saveTaskActiveRuntimeSelectionMock).toHaveBeenCalledWith(
+      "task-1",
+      expect.objectContaining({
+        status: "implementing",
+        profileMode: "task",
+        runtimeId: "claude",
+        providerId: "anthropic",
+        profileId: "profile-1",
+        model: "profile-model",
+      }),
+    );
+  });
+
+  it("uses pinned runtime selection for retries in the same status and profile mode", async () => {
+    findTaskByIdMock.mockReturnValue({
+      id: "task-1",
+      projectId: "project-1",
+      status: "implementing",
+      runtimeOptionsJson: JSON.stringify({ effort: "new-effort" }),
+      modelOverride: "new-task-model",
+    });
+    getTaskActiveRuntimeSelectionMock.mockReturnValue({
+      status: "implementing",
+      profileMode: "task",
+      source: "project_default",
+      profileId: "profile-old",
+      runtimeId: "claude",
+      providerId: "anthropic",
+      transport: "sdk",
+      model: "pinned-model",
+      baseUrl: null,
+      apiKeyEnvVar: "ANTHROPIC_API_KEY",
+      headers: {},
+      options: { effort: "medium" },
+      pinnedAt: "2026-05-13T00:00:00.000Z",
+    });
+    resolveEffectiveRuntimeProfileMock.mockReturnValue({
+      source: "project_default",
+      profile: {
+        id: "profile-new",
+        runtimeId: "claude",
+        providerId: "anthropic",
+        defaultModel: "new-profile-model",
+      },
+      taskRuntimeProfileId: null,
+      projectRuntimeProfileId: "profile-new",
+      systemRuntimeProfileId: null,
+    });
+    queryMock.mockImplementation(makeDelayedSuccess(0, "ok"));
+
+    await executeSubagentQuery({
+      taskId: "task-1",
+      projectRoot: "/tmp/project",
+      agentName: "review-gate",
+      prompt: "check",
+      workflowKind: "review-gate",
+    });
+
+    const callOptions = queryMock.mock.calls[0][0].options as Record<string, unknown>;
+    expect(callOptions.model).toBe("pinned-model");
+    expect(callOptions.effort).toBe("medium");
+    expect(resolveEffectiveRuntimeProfileMock).not.toHaveBeenCalled();
+    expect(saveTaskActiveRuntimeSelectionMock).not.toHaveBeenCalled();
   });
 
   it("does not inject lightModel when no task override and no profile model", async () => {
