@@ -152,6 +152,7 @@ const baseMockEnv = {
   AGENT_USE_SUBAGENTS: true,
   AGENT_FIRST_ACTIVITY_TIMEOUT_MS: 60_000,
   AIF_USAGE_LIMITS_ENABLED: true,
+  AIF_STAGE_RUNTIME_PIN_ENABLED: false,
   AIF_WARMUP_ENABLED: false,
   AIF_RUNTIME_CODEX_NATIVE_SUBAGENTS_ENABLED: false,
   TELEGRAM_BOT_TOKEN: undefined,
@@ -199,6 +200,9 @@ const { RuntimeExecutionError, createRuntimeWorkflowSpec } = await import("@aif/
 const { executeSubagentQuery, resolveAdapterForTask } = await import("../subagentQuery.js");
 
 beforeEach(() => {
+  for (const key of Object.keys(mockEnvOverrides)) {
+    delete mockEnvOverrides[key];
+  }
   saveTaskActiveRuntimeSelectionMock.mockReset();
   getTaskActiveRuntimeSelectionMock.mockReset();
   getTaskActiveRuntimeSelectionMock.mockReturnValue(null);
@@ -1447,7 +1451,48 @@ describe("executeSubagentQuery model fallback policy", () => {
     expect(callOptions.model).toBe("task-model");
   });
 
-  it("uses profile defaultModel when no task override", async () => {
+  it("skips active runtime pin lookup and persistence when the rollout flag is disabled", async () => {
+    findTaskByIdMock.mockReturnValue({
+      id: "task-1",
+      projectId: "project-1",
+      status: "implementing",
+      runtimeOptionsJson: null,
+      modelOverride: null,
+    });
+    getTaskActiveRuntimeSelectionMock.mockReturnValue({
+      status: "implementing",
+      profileMode: "task",
+      source: "project_default",
+      profileId: "profile-old",
+      runtimeId: "claude",
+      providerId: "anthropic",
+      transport: "sdk",
+      model: "pinned-model",
+      baseUrl: null,
+      apiKeyEnvVar: "ANTHROPIC_API_KEY",
+      headers: {},
+      options: { effort: "medium" },
+      pinnedAt: "2026-05-13T00:00:00.000Z",
+    });
+    queryMock.mockImplementation(makeDelayedSuccess(0, "ok"));
+
+    await executeSubagentQuery({
+      taskId: "task-1",
+      projectRoot: "/tmp/project",
+      agentName: "review-gate",
+      prompt: "check",
+      workflowKind: "review-gate",
+    });
+
+    const callOptions = queryMock.mock.calls[0][0].options as Record<string, unknown>;
+    expect(callOptions.model).toBe("profile-model");
+    expect(resolveEffectiveRuntimeProfileMock).toHaveBeenCalled();
+    expect(getTaskActiveRuntimeSelectionMock).not.toHaveBeenCalled();
+    expect(saveTaskActiveRuntimeSelectionMock).not.toHaveBeenCalled();
+  });
+
+  it("persists active runtime selection when the rollout flag is enabled", async () => {
+    mockEnvOverrides.AIF_STAGE_RUNTIME_PIN_ENABLED = true;
     findTaskByIdMock.mockReturnValue({
       id: "task-1",
       projectId: "project-1",
@@ -1478,9 +1523,11 @@ describe("executeSubagentQuery model fallback policy", () => {
         model: "profile-model",
       }),
     );
+    delete mockEnvOverrides.AIF_STAGE_RUNTIME_PIN_ENABLED;
   });
 
   it("uses pinned runtime selection for retries in the same status and profile mode", async () => {
+    mockEnvOverrides.AIF_STAGE_RUNTIME_PIN_ENABLED = true;
     findTaskByIdMock.mockReturnValue({
       id: "task-1",
       projectId: "project-1",
@@ -1530,6 +1577,7 @@ describe("executeSubagentQuery model fallback policy", () => {
     expect(callOptions.effort).toBe("medium");
     expect(resolveEffectiveRuntimeProfileMock).not.toHaveBeenCalled();
     expect(saveTaskActiveRuntimeSelectionMock).not.toHaveBeenCalled();
+    delete mockEnvOverrides.AIF_STAGE_RUNTIME_PIN_ENABLED;
   });
 
   it("does not inject lightModel when no task override and no profile model", async () => {

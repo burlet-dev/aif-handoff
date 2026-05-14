@@ -542,9 +542,12 @@ async function resolveExecutionContext(options: SubagentQueryOptions): Promise<{
 }> {
   const task = findTaskById(options.taskId);
   const profileMode = options.profileMode ?? "task";
+  const env = getEnv();
   const systemDefaultRuntimeProfileId = getAppDefaultRuntimeProfileId(profileMode);
   const workflow = buildWorkflowSpec(options);
-  const pinnedSelection = task ? getTaskActiveRuntimeSelection(options.taskId) : null;
+  const stageRuntimePinEnabled = env.AIF_STAGE_RUNTIME_PIN_ENABLED;
+  const pinnedSelection =
+    stageRuntimePinEnabled && task ? getTaskActiveRuntimeSelection(options.taskId) : null;
   const canUsePinnedSelection =
     pinnedSelection != null &&
     task?.status != null &&
@@ -573,8 +576,8 @@ async function resolveExecutionContext(options: SubagentQueryOptions): Promise<{
       modelOverride,
       suppressModelFallback,
       runtimeOptionsOverride,
-      fallbackRuntimeId: getEnv().AIF_DEFAULT_RUNTIME_ID,
-      fallbackProviderId: getEnv().AIF_DEFAULT_PROVIDER_ID,
+      fallbackRuntimeId: env.AIF_DEFAULT_RUNTIME_ID,
+      fallbackProviderId: env.AIF_DEFAULT_PROVIDER_ID,
       env: process.env,
       logger: {
         debug(context, message) {
@@ -589,7 +592,7 @@ async function resolveExecutionContext(options: SubagentQueryOptions): Promise<{
       },
     });
 
-    if (task?.status) {
+    if (stageRuntimePinEnabled && task?.status) {
       saveTaskActiveRuntimeSelection(options.taskId, {
         status: task.status,
         profileMode,
