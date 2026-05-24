@@ -6,16 +6,14 @@ import { assertWorkspacePackagesResolveToSource } from "./lib/workspace-resoluti
 
 // Minimum Node version required transitively (Vite 8). Keep in sync with
 // `engines.node` in the root package.json.
-const REQUIRED_NODE_MAJOR = 20;
-const REQUIRED_NODE_MINOR_FOR_20 = 19;
+const SUPPORTED_NODE_RANGE = "^20.19.0 || >=22.12.0";
 
 function assertNodeVersion() {
-  const [maj, min] = process.versions.node.split(".").map(Number);
-  const ok =
-    (maj === REQUIRED_NODE_MAJOR && min >= REQUIRED_NODE_MINOR_FOR_20) || maj > REQUIRED_NODE_MAJOR;
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  const ok = (major === 20 && minor >= 19) || (major > 22 || (major === 22 && minor >= 12));
   if (!ok) {
     console.error(
-      `[dev] Node ${process.versions.node} is not supported. Requires Node ${REQUIRED_NODE_MAJOR}.${REQUIRED_NODE_MINOR_FOR_20}+ or newer (Vite 8 dependency).\n` +
+      `[dev] Node ${process.versions.node} is not supported. Requires Node ${SUPPORTED_NODE_RANGE} (Vite 8 dependency; Node 21 is not supported).\n` +
         `[dev] Use nvm: \`nvm use\` (see .nvmrc) or install a compatible version.`,
     );
     process.exit(1);
