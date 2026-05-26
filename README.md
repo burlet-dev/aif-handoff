@@ -42,22 +42,85 @@ Need something custom? Add your own runtime adapter module and load it at startu
 ```bash
 git clone https://github.com/lee-to/aif-handoff.git
 cd aif-handoff
+nvm use            # pick Node version from .nvmrc (requires Node 20.19+ or 22.12+)
+cp .env.example .env
 npm install
 npm run init
 npm run dev
 ```
 
+> **If you switch Node between runs** (for example via `nvm use`), run
+> `npm rebuild better-sqlite3` after the switch. The native binary is bound
+> to `NODE_MODULE_VERSION`, and without a rebuild the API will crash with
+> `ERR_DLOPEN_FAILED`, which surfaces as a **502 Bad Gateway** in the Vite
+> UI. From this version onward, `npm run dev` detects this case at startup
+> and prints the exact rebuild command.
+
 Set `MCP_PORT` in your shell or root `.env` before `npm run dev` if you also want the MCP HTTP server in local development. Use an integer port between `1` and `65535`; invalid values are ignored by the dev launcher and the settings install route falls back to the local `stdio` entry instead of writing an HTTP MCP endpoint.
+
+> **`ai-factory` is a required runtime dependency**, not an optional plugin. The agent uses
+> the `ai-factory` CLI to scaffold `.ai-factory/` inside every project you create through the
+> UI. It is declared in the root `package.json` and is installed automatically by `npm install`.
+> If you install with `npm ci --omit=dev` or `NODE_ENV=production npm install`, make sure
+> `ai-factory` ends up in `node_modules/` — otherwise the agent falls back to `npx ai-factory ...`
+> at task-run time, which requires network access to the npm registry. The agent logs a clear
+> warning at boot when the CLI is not resolvable.
 
 ### With Docker
 
 ```bash
 git clone https://github.com/lee-to/aif-handoff.git
 cd aif-handoff
+
+# 1. Prepare environment
+cp .env.example .env       # required: docker-compose.yml uses `env_file: .env`
+mkdir -p projects          # default PROJECTS_DIR — must exist before first
+                           # `docker compose up`, otherwise Docker creates it
+                           # as root and the container user cannot write to it
+
+# 2. Bring the stack up
 docker compose up --build
+
+# 3. Authenticate Claude (one-time, see Authentication below for details)
+docker compose exec agent claude login
+docker compose restart agent
 ```
 
 Development starts three services by default. If `MCP_PORT` is set to a valid integer port, it starts a fourth service for MCP over HTTP. Docker starts all four services.
+
+#### Project paths (host ↔ container)
+
+When you create a project in the UI, the **Root Path** field expects a host
+path (for example `/Users/you/projects/my-app`). The dev compose mounts
+the host directory `PROJECTS_DIR` onto `PROJECTS_MOUNT` (default
+`/home/www`) inside every container. The API/agent containers see your
+project as `/home/www/my-app` and the API transparently translates the
+host path you typed to the matching container path when persisting it.
+
+The default `PROJECTS_DIR` is `${PWD}/projects` (relative to the compose
+file). To use a different host directory:
+
+```bash
+PROJECTS_DIR=/srv/aif-projects docker compose up --build
+```
+
+The directory must exist on the host before `docker compose up` —
+Docker creates missing bind-mount targets as root-owned, which makes
+them unwritable from the container's `node` user.
+
+#### Resetting state
+
+Containers persist data in named Docker volumes (`db-data`, `claude-auth`,
+`codex-auth`):
+
+```bash
+docker compose down       # stops containers, keeps the database and auth state
+docker compose down -v    # also removes named volumes — fresh slate
+                          # (you will need to `claude login` again)
+```
+
+Project files in `PROJECTS_DIR` live on the host filesystem and are
+never deleted by `down -v` — remove them manually if needed.
 
 | Service   | URL                               | Description                                  |
 | --------- | --------------------------------- | -------------------------------------------- |
