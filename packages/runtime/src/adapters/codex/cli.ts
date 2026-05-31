@@ -247,15 +247,36 @@ interface CuratedEnvResult {
   droppedDisallowedPrefixKeys: string[];
 }
 
-function buildCuratedEnv(apiKeyEnvVar: string): CuratedEnvResult {
+interface BuildCuratedEnvOptions {
+  /**
+   * Whether API-key auth was explicitly opted into for this run (profile
+   * `apiKeyEnvVar`/`apiKey`). When false, an ambient `OPENAI_API_KEY` — and a
+   * custom `apiKeyEnvVar` — are blocked so a placeholder key cannot hijack an
+   * OAuth-backed `codex login` session.
+   */
+  allowApiKey: boolean;
+}
+
+function buildCuratedEnv(apiKeyEnvVar: string, opts: BuildCuratedEnvOptions): CuratedEnvResult {
   const env: Record<string, string> = {};
   let forwardedCount = 0;
   let filteredCount = 0;
   let blockedCount = 0;
   const droppedDisallowedPrefixKeys = new Set<string>();
+  // OPENAI_API_KEY may only be forwarded when API-key auth is opted into AND it
+  // is the configured key var; otherwise it is blocked to protect OAuth runs.
+  const allowOpenAiApiKey = opts.allowApiKey && apiKeyEnvVar === "OPENAI_API_KEY";
   for (const [key, value] of Object.entries(process.env)) {
     if (value == null) continue;
     if (BLOCKED_ENV_KEYS.has(key)) {
+      blockedCount += 1;
+      continue;
+    }
+    if (key === "OPENAI_API_KEY" && !allowOpenAiApiKey) {
+      blockedCount += 1;
+      continue;
+    }
+    if (key === apiKeyEnvVar && !opts.allowApiKey) {
       blockedCount += 1;
       continue;
     }
@@ -974,10 +995,19 @@ export async function runCodexCli(
   const composedPrompt = composePrompt(input);
   const { args, usesPromptPlaceholder } = normalizeCliArgs(input, composedPrompt, logger);
   const options = asRecord(input.options);
-  const apiKeyEnvVar =
-    typeof options.apiKeyEnvVar === "string" ? options.apiKeyEnvVar : "OPENAI_API_KEY";
-  const curatedEnv = buildCuratedEnv(apiKeyEnvVar);
+  const explicitApiKeyEnvVar = readString(options.apiKeyEnvVar);
+  const explicitApiKey = readString(options.apiKey);
+  const allowApiKey = Boolean(explicitApiKeyEnvVar) || Boolean(explicitApiKey);
+  const apiKeyEnvVar = explicitApiKeyEnvVar ?? "OPENAI_API_KEY";
+  const curatedEnv = buildCuratedEnv(apiKeyEnvVar, { allowApiKey });
   const env = curatedEnv.env;
+  // An explicitly configured literal apiKey is injected directly (it is never
+  // forwarded from process.env). Mirror it onto OPENAI_API_KEY so the Codex CLI
+  // picks it up regardless of the custom env var name.
+  if (explicitApiKey) {
+    env[apiKeyEnvVar] = explicitApiKey;
+    env.OPENAI_API_KEY = explicitApiKey;
+  }
   logger?.debug?.(
     {
       runtimeId: input.runtimeId,

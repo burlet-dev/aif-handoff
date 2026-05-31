@@ -93,9 +93,28 @@ export function buildCodexAppServerEnvWithStats(
   let blockedCount = 0;
   const droppedDisallowedPrefixKeys = new Set<string>();
 
+  const options = asRecord(input.options);
+  const explicitApiKeyEnvVar = readString(input.apiKeyEnvVar) ?? readString(options.apiKeyEnvVar);
+  const explicitApiKey = readString(input.apiKey) ?? readString(options.apiKey);
+  // Local app-server runs default to `codex login` / OAuth. API-key auth is
+  // opted into only via an explicit profile apiKeyEnvVar/apiKey — an ambient
+  // OPENAI_API_KEY must not be consumed or forwarded, otherwise a placeholder
+  // key hijacks the OAuth session.
+  const allowApiKey = Boolean(explicitApiKeyEnvVar) || Boolean(explicitApiKey);
+  const apiKeyEnvVar = explicitApiKeyEnvVar ?? "OPENAI_API_KEY";
+  const allowOpenAiApiKey = allowApiKey && apiKeyEnvVar === "OPENAI_API_KEY";
+
   for (const [key, value] of Object.entries(process.env)) {
     if (value == null) continue;
     if (BLOCKED_ENV_KEYS.has(key)) {
+      blockedCount += 1;
+      continue;
+    }
+    if (key === "OPENAI_API_KEY" && !allowOpenAiApiKey) {
+      blockedCount += 1;
+      continue;
+    }
+    if (key === apiKeyEnvVar && !allowApiKey) {
       blockedCount += 1;
       continue;
     }
@@ -110,14 +129,7 @@ export function buildCodexAppServerEnvWithStats(
     }
   }
 
-  const options = asRecord(input.options);
-  const apiKeyEnvVar =
-    readString(input.apiKeyEnvVar) ?? readString(options.apiKeyEnvVar) ?? "OPENAI_API_KEY";
-  const apiKey =
-    readString(input.apiKey) ??
-    readString(options.apiKey) ??
-    readString(process.env[apiKeyEnvVar]) ??
-    readString(process.env.OPENAI_API_KEY);
+  const apiKey = explicitApiKey ?? (allowApiKey ? readString(process.env[apiKeyEnvVar]) : null);
   if (apiKey) {
     env[apiKeyEnvVar] = apiKey;
     env.OPENAI_API_KEY = apiKey;
