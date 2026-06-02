@@ -1330,6 +1330,67 @@ describe("tasks API", () => {
     });
   });
 
+  describe("POST /tasks/bulk-delete", () => {
+    it("atomically deletes many tasks, their comments, and broadcasts each id", async () => {
+      const db = testDb.current;
+      db.insert(tasks)
+        .values([
+          { id: "bd-1", projectId: "test-project", title: "Bulk 1" },
+          { id: "bd-2", projectId: "test-project", title: "Bulk 2" },
+          { id: "bd-keep", projectId: "test-project", title: "Keep me" },
+        ])
+        .run();
+      db.insert(taskComments)
+        .values({ id: "bd-c1", taskId: "bd-1", author: "human", message: "hi" })
+        .run();
+      mockBroadcast.mockClear();
+
+      const res = await app.request("/tasks/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ["bd-1", "bd-2"] }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true, deleted: 2 });
+      expect(db.select().from(tasks).where(eq(tasks.id, "bd-1")).get()).toBeUndefined();
+      expect(db.select().from(tasks).where(eq(tasks.id, "bd-2")).get()).toBeUndefined();
+      expect(db.select().from(tasks).where(eq(tasks.id, "bd-keep")).get()).toBeDefined();
+      expect(
+        db.select().from(taskComments).where(eq(taskComments.taskId, "bd-1")).get(),
+      ).toBeUndefined();
+      expect(mockBroadcast).toHaveBeenCalledWith({
+        type: "task:deleted",
+        payload: { id: "bd-1" },
+      });
+      expect(mockBroadcast).toHaveBeenCalledWith({
+        type: "task:deleted",
+        payload: { id: "bd-2" },
+      });
+    });
+
+    it("is idempotent for ids that no longer exist", async () => {
+      const res = await app.request("/tasks/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ["ghost-1", "ghost-2"] }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true, deleted: 0 });
+    });
+
+    it("rejects an empty ids array with 400", async () => {
+      const res = await app.request("/tasks/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [] }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe("POST /tasks/:id/events", () => {
     it("should return 404 for events on non-existent task", async () => {
       const res = await app.request("/tasks/missing/events", {

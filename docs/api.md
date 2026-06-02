@@ -706,6 +706,29 @@ DELETE /tasks/:id
 
 **WebSocket event:** `task:deleted`
 
+### Bulk Delete Tasks
+
+```
+POST /tasks/bulk-delete
+```
+
+Atomically deletes multiple tasks (and their comments) in a single transaction.
+
+**Body:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `ids` | string[] | Task ids to delete (1–500 entries) |
+
+**Response:** `200 OK`
+
+```json
+{ "success": true, "deleted": 2 }
+```
+
+`deleted` is the number of task rows actually removed. The operation is idempotent — ids that no longer exist are silently ignored.
+
+**WebSocket event:** `task:deleted` (broadcast once per id in the request)
+
 ### Apply State Event
 
 ```
