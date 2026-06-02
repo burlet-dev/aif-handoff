@@ -1343,7 +1343,7 @@ describe("tasks API", () => {
       db.insert(taskComments)
         .values({ id: "bd-c1", taskId: "bd-1", author: "human", message: "hi" })
         .run();
-      mockBroadcast.mockClear();
+      vi.mocked(mockBroadcast).mockClear();
 
       const res = await app.request("/tasks/bulk-delete", {
         method: "POST",
@@ -1359,11 +1359,11 @@ describe("tasks API", () => {
       expect(
         db.select().from(taskComments).where(eq(taskComments.taskId, "bd-1")).get(),
       ).toBeUndefined();
-      expect(mockBroadcast).toHaveBeenCalledWith({
+      expect(vi.mocked(mockBroadcast)).toHaveBeenCalledWith({
         type: "task:deleted",
         payload: { id: "bd-1" },
       });
-      expect(mockBroadcast).toHaveBeenCalledWith({
+      expect(vi.mocked(mockBroadcast)).toHaveBeenCalledWith({
         type: "task:deleted",
         payload: { id: "bd-2" },
       });
