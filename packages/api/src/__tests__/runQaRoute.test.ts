@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
-import { projects, tasks } from "@aif/shared";
+import { projects, tasks, resetEnvCache } from "@aif/shared";
 import { createTestDb } from "@aif/shared/server";
+
+// QA routes are gated behind AIF_QA_PIPELINE_ENABLED (off by default). Enable it
+// before importing the route module — schemas.ts calls getEnv() at schema-definition
+// time, which caches the parsed env. The disabled-flag case below toggles it back.
+process.env.AIF_QA_PIPELINE_ENABLED = "true";
 
 const testDb = { current: createTestDb() };
 
@@ -79,11 +84,16 @@ describe("POST /tasks/:id/run-qa", () => {
     expect(mockRunQaQuery).not.toHaveBeenCalled();
   });
 
-  it("returns 409 when task has no branchName", async () => {
+  it("returns 202 for a branchless task (runner resolves the branch via git)", async () => {
     seedTask({ branchName: null });
     const res = await app.request("/tasks/t1/run-qa", { method: "POST" });
-    expect(res.status).toBe(409);
-    expect(mockRunQaQuery).not.toHaveBeenCalled();
+    expect(res.status).toBe(202);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockRunQaQuery).toHaveBeenCalledWith({
+      projectId: "p1",
+      taskId: "t1",
+      executionRoot: "/tmp/p1",
+    });
   });
 
   it("returns 202 and triggers the runner on a valid request", async () => {
@@ -109,5 +119,21 @@ describe("POST /tasks/:id/run-qa", () => {
       taskId: "t1",
       executionRoot: "/tmp/wt/t1",
     });
+  });
+
+  it("returns 403 with feature_disabled when AIF_QA_PIPELINE_ENABLED is off", async () => {
+    seedTask();
+    process.env.AIF_QA_PIPELINE_ENABLED = "false";
+    resetEnvCache();
+    try {
+      const res = await app.request("/tasks/t1/run-qa", { method: "POST" });
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { code?: string };
+      expect(body.code).toBe("feature_disabled");
+      expect(mockRunQaQuery).not.toHaveBeenCalled();
+    } finally {
+      process.env.AIF_QA_PIPELINE_ENABLED = "true";
+      resetEnvCache();
+    }
   });
 });

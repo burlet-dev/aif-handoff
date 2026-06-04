@@ -792,6 +792,7 @@ export function createTask(input: {
   planTests?: boolean;
   skipReview?: boolean;
   useSubagents?: boolean;
+  autoQa?: boolean;
   maxReviewIterations?: number;
   paused?: boolean;
   runtimeProfileId?: string | null;
@@ -839,6 +840,7 @@ export function createTask(input: {
       planTests: input.planTests,
       skipReview: input.skipReview,
       useSubagents: input.useSubagents,
+      autoQa: input.autoQa,
       maxReviewIterations: input.maxReviewIterations,
       paused: input.paused,
       runtimeProfileId: input.runtimeProfileId ?? null,

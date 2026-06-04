@@ -58,6 +58,27 @@ export function computeQaBranchSlug(branch: string, executionRoot: string): stri
   return `${safeSlug}-${hash8}`;
 }
 
+/**
+ * Resolve the branch QA artifacts are keyed under. Mirrors the aif-qa skill's
+ * Step 0.2 resolution: prefer the task's persisted branch, otherwise fall back
+ * to the branch currently checked out in `executionRoot` (`git branch
+ * --show-current`). Fast-mode tasks never persist a branchName — they run on the
+ * project's current branch by design (planner.ts) — so without this fallback QA
+ * would be a silent no-op for them. Returns "" on detached HEAD / non-git roots;
+ * `computeQaBranchSlug` normalizes that to the "branch" slug, matching the skill.
+ */
+export function resolveQaBranch(persistedBranch: string | null, executionRoot: string): string {
+  if (persistedBranch) return persistedBranch;
+  try {
+    return execFileSync("git", ["branch", "--show-current"], {
+      cwd: executionRoot,
+      encoding: "utf-8",
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
 /** Build the explicit aif-qa pipeline prompt with absolute artifact paths baked in. */
 export function buildQaPrompt(artifactDir: string): string {
   return [
@@ -110,21 +131,24 @@ export async function runQaQuery(input: RunQaQueryInput): Promise<RunQaQueryResu
     return { ok: false, error: msg };
   }
 
-  if (!task.branchName) {
-    const msg = `Task ${taskId} has no branchName — cannot compute QA artifact slug`;
-    log.warn({ taskId, projectId }, msg);
-    return { ok: false, error: msg };
-  }
+  // Resolve the QA branch the same way the aif-qa skill does (Step 0.2): the
+  // task's persisted branch, or the current git branch as a fallback. This keeps
+  // the runner's slug in lockstep with the skill so CLI/API transports agree on
+  // the artifact directory even for branchless (fast-mode) tasks.
+  const resolvedBranch = resolveQaBranch(task.branchName, executionRoot);
 
   // Resolve artifact paths deterministically BEFORE running the runtime so the
   // exact paths can be baked into the prompt (CLI resolves /aif-qa --all to its
   // own slug dir, but Codex-API/OpenRouter only execute the spelled-out prompt).
   const cfg = getProjectConfig(executionRoot);
   const qaRoot = join(executionRoot, cfg.paths.qa);
-  const branchSlug = computeQaBranchSlug(task.branchName, executionRoot);
+  const branchSlug = computeQaBranchSlug(resolvedBranch, executionRoot);
   const artifactDir = join(qaRoot, branchSlug);
 
-  log.info({ taskId, branchName: task.branchName }, "[QA] Starting QA run");
+  log.info(
+    { taskId, branch: resolvedBranch, branchSource: task.branchName ? "task" : "git" },
+    "[QA] Starting QA run",
+  );
   log.debug(
     { taskId, executionRoot, qaRoot, branchSlug, artifactDir },
     "[QA] Resolved artifact dir",

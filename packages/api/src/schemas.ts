@@ -59,6 +59,7 @@ export const createTaskSchema = z.object({
   planTests: z.boolean().optional(),
   skipReview: z.boolean().optional(),
   useSubagents: z.boolean().default(getEnv().AGENT_USE_SUBAGENTS),
+  autoQa: z.boolean().optional(),
   maxReviewIterations: z
     .number()
     .int()

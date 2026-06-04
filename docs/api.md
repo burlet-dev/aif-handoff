@@ -761,7 +761,9 @@ runner generates three markdown artifacts under `<paths.qa>/<branch-slug>/`
 (`change-summary.md`, `test-plan.md`, `test-cases.md`), persists them onto the task
 (`qaChangeSummary`, `qaTestPlan`, `qaTestCases`), and updates `qaStatus`. Execution
 uses the task's worktree root when present (`worktreePath`), otherwise the project
-root. The same pipeline runs automatically after `approve_done` when `autoQa = true`.
+root. Artifact slugs use the task's persisted `branchName` when present; branchless
+tasks fall back to the current git branch in the execution root. The same pipeline
+runs automatically after `approve_done` when `autoQa = true`.
 
 **Response:** `202 Accepted`
 
@@ -771,10 +773,10 @@ root. The same pipeline runs automatically after `approve_done` when `autoQa = t
 
 **Errors:**
 
+- `403` — QA pipeline feature flag is disabled (`AIF_QA_PIPELINE_ENABLED=false`); body carries `code: "feature_disabled"`
 - `404` — task not found
 - `404` — project not found
 - `409` — QA is already running (`qaStatus === "running"`)
-- `409` — task has no `branchName` (required to compute the artifact slug)
 
 **WebSocket events:** `task:qa_started` immediately, then `task:qa_done` or
 `task:qa_failed` when the run finishes. The runner also broadcasts `task:updated`

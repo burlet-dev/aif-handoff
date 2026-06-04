@@ -4,6 +4,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTask, useRunQa } from "@/hooks/useTasks";
+import { useQaPipelineEnabled } from "@/hooks/useSettings";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TaskDescription } from "./TaskDescription";
 import { TaskPlan } from "./TaskPlan";
@@ -31,6 +32,7 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
   const [selectedTab, setSelectedTab] = useState<TaskDetailTab | null>(null);
   const actions = useTaskDetailActions(task, onClose);
   const runQaMutation = useRunQa(taskId ?? "");
+  const qaPipelineEnabled = useQaPipelineEnabled();
   const defaultTab: TaskDetailTab = (() => {
     if (!task) return "implementation";
     if (task.status === "review") return "review";
@@ -152,7 +154,7 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
                       <TaskComments taskId={task.id} />
                     </Section>
                   )}
-                  {activeTab === "qa" && (
+                  {qaPipelineEnabled && activeTab === "qa" && (
                     <TaskQA
                       task={task}
                       onRunQa={() => runQaMutation.mutate()}

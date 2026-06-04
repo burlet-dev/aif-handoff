@@ -91,12 +91,15 @@ describe("runQaQuery", () => {
     expect(mockRunApiRuntimeOneShot).not.toHaveBeenCalled();
   });
 
-  it("fails loud when task has no branchName (does not guess via git)", async () => {
+  it("falls back to the current git branch when task has no branchName", async () => {
     mockFindTaskById.mockReturnValue({ id: "t1", branchName: null, qaStatus: "idle" });
+    // executionRoot is a plain tmpdir (no git work tree), so the skill-mirrored
+    // `git branch --show-current` fallback resolves to "" → the "branch" slug.
+    const slug = computeQaBranchSlug("", root);
+    writeArtifacts(join(root, ".ai-factory/qa", slug));
     const res = await runQaQuery({ projectId: "p1", taskId: "t1", executionRoot: root });
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/branchName/);
-    expect(mockRunApiRuntimeOneShot).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    expect(mockRunApiRuntimeOneShot).toHaveBeenCalled();
   });
 
   it("calls runtime with qa workflow contract", async () => {

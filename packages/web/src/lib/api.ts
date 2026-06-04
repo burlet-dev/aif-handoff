@@ -100,6 +100,7 @@ export interface SettingsResponse {
   autoReviewStrategy: "full_re_review" | "closure_first";
   usageLimitsEnabled: boolean;
   warmupEnabled: boolean;
+  qaPipelineEnabled?: boolean;
   runtimeReadiness: {
     availableRuntimeCount: number;
     runtimeProfileCount: number;
@@ -437,7 +438,6 @@ export const api = {
   },
 
   async runQa(id: string): Promise<void> {
-    console.debug("[api] POST /tasks/%s/run-qa", id);
     await request<void>(`${API_BASE}/${id}/run-qa`, { method: "POST" });
   },
 

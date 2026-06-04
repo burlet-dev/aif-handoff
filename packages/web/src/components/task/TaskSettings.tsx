@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Radio } from "@/components/ui/radio";
 import { Select } from "@/components/ui/select";
 import { useProjects } from "@/hooks/useProjects";
+import { useQaPipelineEnabled } from "@/hooks/useSettings";
 import { useAppRuntimeDefaults, useRuntimeProfiles, useRuntimes } from "@/hooks/useRuntimeProfiles";
 import { formatRuntimeProfileOptionLabel } from "@/lib/runtimeProfiles";
 import { defaultsForMode, type Task, type UpdateTaskInput } from "@aif/shared/browser";
@@ -20,6 +21,7 @@ export function TaskSettings({ task, onSave }: Props) {
   const { data: appRuntimeDefaults } = useAppRuntimeDefaults();
   const { data: runtimeProfiles = [] } = useRuntimeProfiles(task.projectId, true);
   const { data: runtimes = [] } = useRuntimes();
+  const qaPipelineEnabled = useQaPipelineEnabled();
   const project = projectsList?.find((p) => p.id === task.projectId);
   const isParallel = project?.parallelEnabled ?? false;
   const runtimeDefaultLabel = project?.defaultTaskRuntimeProfileId
@@ -158,9 +160,13 @@ export function TaskSettings({ task, onSave }: Props) {
         <CheckboxField label="Use subagents" checked={useSubagents} onChange={setUseSubagents}>
           Run via custom subagents (plan-coordinator, implement-coordinator, sidecars).
         </CheckboxField>
-        <CheckboxField label="Run QA after done" checked={autoQa} onChange={setAutoQa}>
-          Automatically run the QA pipeline when this task is approved (done → verified).
-        </CheckboxField>
+        {qaPipelineEnabled && (
+          <CheckboxField label="Run QA after done" checked={autoQa} onChange={setAutoQa}>
+            Automatically run the QA pipeline when this task is approved (done → verified).
+            Fast-mode tasks have no feature branch, so QA artifacts are keyed by the current branch
+            — later runs on the same branch overwrite earlier ones.
+          </CheckboxField>
+        )}
       </div>
 
       {autoMode && (

@@ -168,7 +168,6 @@ export function useWebSocket() {
         raw.type === "task:qa_done" ||
         raw.type === "task:qa_failed"
       ) {
-        console.debug("[ws] qa event:", raw.type, raw.payload);
         window.dispatchEvent(new CustomEvent(raw.type, { detail: raw.payload }));
         if (isRecord(raw.payload) && typeof raw.payload.taskId === "string") {
           queryClient.invalidateQueries({ queryKey: ["task", raw.payload.taskId] });

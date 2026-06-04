@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { jsonValidator } from "../middleware/zodValidator.js";
 import { internalBroadcastAuth } from "../middleware/internalBroadcastAuth.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { logger, parseAttachments, getProjectConfig, defaultsForMode } from "@aif/shared";
+import { logger, parseAttachments, getProjectConfig, defaultsForMode, getEnv } from "@aif/shared";
 import {
   createTaskSchema,
   updateTaskSchema,
@@ -178,6 +178,7 @@ tasksRouter.post("/", jsonValidator(createTaskSchema), async (c) => {
     planTests: resolvedPlanTests,
     skipReview: resolvedSkipReview,
     useSubagents: body.useSubagents,
+    autoQa: body.autoQa,
     maxReviewIterations: body.maxReviewIterations,
     paused: body.paused,
     runtimeProfileId: body.runtimeProfileId,
@@ -517,34 +518,38 @@ tasksRouter.post("/:id/events", jsonValidator(taskEventSchema), async (c) => {
 
     // Fire-and-forget: run /aif-qa when approved and autoQa is enabled on the task.
     // approve_done moves the task done -> verified; QA runs asynchronously after.
-    if (event === "approve_done" && handled.task.autoQa) {
-      const { id: taskId, projectId, branchName, worktreePath } = handled.task;
-      if (!branchName) {
-        log.warn({ taskId }, "Auto QA skipped — no branchName on task");
+    // Gated behind AIF_QA_PIPELINE_ENABLED (off by default).
+    if (event === "approve_done" && handled.task.autoQa && !getEnv().AIF_QA_PIPELINE_ENABLED) {
+      log.debug(
+        { taskId: handled.task.id },
+        "Auto QA skipped — AIF_QA_PIPELINE_ENABLED is disabled",
+      );
+    } else if (event === "approve_done" && handled.task.autoQa) {
+      // Branchless (fast-mode) tasks are allowed: the runner resolves the branch
+      // via `git branch --show-current`, mirroring the aif-qa skill.
+      const { id: taskId, projectId, worktreePath } = handled.task;
+      const project = findProjectById(projectId);
+      if (!project) {
+        log.error({ taskId, projectId }, "Auto QA skipped — project not found");
       } else {
-        const project = findProjectById(projectId);
-        if (!project) {
-          log.error({ taskId, projectId }, "Auto QA skipped — project not found");
-        } else {
-          const executionRoot = worktreePath ?? project.rootPath;
-          log.info({ taskId, branchName }, "Auto QA triggered (autoQa=true)");
-          broadcast({
-            type: "task:qa_started",
-            payload: { taskId, projectId, status: "started" },
-          });
-          void (async () => {
-            const { runQaQuery } = await import("../services/qaRunner.js");
-            const result = await runQaQuery({ projectId, taskId, executionRoot });
-            broadcast(
-              result.ok
-                ? { type: "task:qa_done", payload: { taskId, projectId, status: "done" } }
-                : {
-                    type: "task:qa_failed",
-                    payload: { taskId, projectId, status: "failed", error: result.error },
-                  },
-            );
-          })();
-        }
+        const executionRoot = worktreePath ?? project.rootPath;
+        log.info({ taskId }, "Auto QA triggered (autoQa=true)");
+        broadcast({
+          type: "task:qa_started",
+          payload: { taskId, projectId, status: "started" },
+        });
+        void (async () => {
+          const { runQaQuery } = await import("../services/qaRunner.js");
+          const result = await runQaQuery({ projectId, taskId, executionRoot });
+          broadcast(
+            result.ok
+              ? { type: "task:qa_done", payload: { taskId, projectId, status: "done" } }
+              : {
+                  type: "task:qa_failed",
+                  payload: { taskId, projectId, status: "failed", error: result.error },
+                },
+          );
+        })();
       }
     }
 
@@ -558,6 +563,10 @@ tasksRouter.post("/:id/events", jsonValidator(taskEventSchema), async (c) => {
 // POST /tasks/:id/run-qa — manually trigger the aif-qa pipeline (fire-and-forget)
 tasksRouter.post("/:id/run-qa", (c) => {
   const { id } = c.req.param();
+  if (!getEnv().AIF_QA_PIPELINE_ENABLED) {
+    log.warn({ taskId: id }, "QA cannot run — AIF_QA_PIPELINE_ENABLED is disabled");
+    return c.json({ error: "QA pipeline is disabled", code: "feature_disabled" }, 403);
+  }
   const task = findTaskById(id);
   if (!task) {
     return c.json({ error: "Task not found" }, 404);
@@ -570,10 +579,6 @@ tasksRouter.post("/:id/run-qa", (c) => {
   if (task.qaStatus === "running") {
     log.warn({ taskId: id }, "QA already running for task, skipping");
     return c.json({ error: "QA already running" }, 409);
-  }
-  if (!task.branchName) {
-    log.warn({ taskId: id }, "QA cannot run — task has no branchName");
-    return c.json({ error: "Task has no branch" }, 409);
   }
 
   const projectId = task.projectId;
