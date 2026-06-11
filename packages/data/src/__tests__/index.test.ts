@@ -23,6 +23,7 @@ const {
   createTask,
   updateTask,
   tryStartQaRun,
+  resetStaleQaRuns,
   setTaskFields,
   deleteTask,
   findTaskById,
@@ -233,6 +234,33 @@ describe("data layer", () => {
 
     it("returns false for an unknown task id (no row to flip)", () => {
       expect(tryStartQaRun("ghost")).toBe(false);
+    });
+  });
+
+  describe("resetStaleQaRuns", () => {
+    it("flips every running row to error and returns the count", () => {
+      const a = createTask({ projectId: "proj-1", title: "A", description: "D" });
+      const b = createTask({ projectId: "proj-1", title: "B", description: "D" });
+      expect(tryStartQaRun(a!.id)).toBe(true);
+      expect(tryStartQaRun(b!.id)).toBe(true);
+      expect(resetStaleQaRuns()).toBe(2);
+      expect(findTaskById(a!.id)!.qaStatus).toBe("error");
+      expect(findTaskById(b!.id)!.qaStatus).toBe("error");
+    });
+
+    it("leaves non-running statuses untouched and returns 0 when nothing is stale", () => {
+      const t = createTask({ projectId: "proj-1", title: "T", description: "D" });
+      updateTask(t!.id, { qaStatus: "done" });
+      expect(resetStaleQaRuns()).toBe(0);
+      expect(findTaskById(t!.id)!.qaStatus).toBe("done");
+    });
+
+    it("unblocks the QA claim: the recovered task can start QA again", () => {
+      const t = createTask({ projectId: "proj-1", title: "T", description: "D" });
+      expect(tryStartQaRun(t!.id)).toBe(true);
+      resetStaleQaRuns();
+      // Stale "running" released — the compare-and-set can win again.
+      expect(tryStartQaRun(t!.id)).toBe(true);
     });
   });
 

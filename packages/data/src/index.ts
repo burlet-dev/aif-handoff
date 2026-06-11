@@ -918,6 +918,22 @@ export function tryStartQaRun(id: string): boolean {
 }
 
 /**
+ * Recover tasks orphaned in qaStatus:"running" — a crash/restart mid-run or a
+ * dispatch failure that never finalized leaves the row in "running", and since
+ * `tryStartQaRun` only wins when qa_status != 'running', such a task could
+ * never start QA again. Called once at API startup; flips every "running" row
+ * to the terminal "error" status and returns how many rows were recovered.
+ */
+export function resetStaleQaRuns(): number {
+  const result = getDb()
+    .update(tasks)
+    .set({ qaStatus: "error", updatedAt: new Date().toISOString() })
+    .where(eq(tasks.qaStatus, "running"))
+    .run();
+  return result.changes;
+}
+
+/**
  * Write only the `position` column. Does NOT bump `updatedAt` — manual reorder
  * is metadata, not content, and must not disturb "updated at" sort views.
  */

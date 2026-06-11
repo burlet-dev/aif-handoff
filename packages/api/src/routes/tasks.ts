@@ -74,6 +74,22 @@ function dispatchQaRun(projectId: string, taskId: string, executionRoot: string)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log.error({ taskId, projectId, error }, "QA dispatch failed before runner completed");
+      // Release the claimed "running" slot with a terminal status: tryStartQaRun
+      // only wins when qa_status != 'running', so without this a dispatch failure
+      // would block every future QA start for the task. Defensive wrap — a DB
+      // failure here must not prevent the task:qa_failed broadcast below.
+      try {
+        updateTask(taskId, { qaStatus: "error" });
+        const failedTask = findTaskById(taskId);
+        if (failedTask) {
+          broadcast({ type: "task:updated", payload: toTaskBroadcastPayload(failedTask) });
+        }
+      } catch (persistErr) {
+        log.error(
+          { persistErr, taskId },
+          "Failed to persist QA error status after dispatch failure",
+        );
+      }
       broadcast({
         type: "task:qa_failed",
         payload: { taskId, projectId, status: "failed", error: message },

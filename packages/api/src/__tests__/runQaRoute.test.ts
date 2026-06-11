@@ -97,6 +97,28 @@ describe("POST /tasks/:id/run-qa", () => {
     expect(mockRunQaQuery).toHaveBeenCalledTimes(1);
   });
 
+  it("releases the running claim with qaStatus error when the dispatch throws", async () => {
+    seedTask(); // qaStatus idle
+    // runQaQuery is contracted never to throw, but the dispatch guard must
+    // survive a contract breach (or a failing dynamic import): persist a
+    // terminal qaStatus so the atomic claim does not stay stuck on "running"
+    // and block every future QA start for the task.
+    mockRunQaQuery.mockRejectedValue(new Error("dispatch boom"));
+    const res = await app.request("/tasks/t1/run-qa", { method: "POST" });
+    expect(res.status).toBe(202);
+    await new Promise((r) => setTimeout(r, 0));
+    const row = testDb.current
+      .select()
+      .from(tasks)
+      .all()
+      .find((t) => t.id === "t1");
+    expect(row?.qaStatus).toBe("error");
+    // Slot released — a follow-up manual run can claim it again.
+    mockRunQaQuery.mockResolvedValue({ ok: true });
+    const retry = await app.request("/tasks/t1/run-qa", { method: "POST" });
+    expect(retry.status).toBe(202);
+  });
+
   it("returns 202 for a branchless task (runner resolves the branch via git)", async () => {
     seedTask({ branchName: null });
     const res = await app.request("/tasks/t1/run-qa", { method: "POST" });

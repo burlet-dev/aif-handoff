@@ -189,6 +189,8 @@ Two trigger paths exist:
 
 Progress is reported via `qaStatus` (`idle` → `running` → `done`/`error`) and the `task:qa_started` / `task:qa_done` / `task:qa_failed` WebSocket events.
 
+Concurrent starts are serialized by an atomic DB claim (`tryStartQaRun` — a conditional `UPDATE` to `running`), so a duplicate manual POST or a manual+auto race never spawns two runtime runs. Every failure path releases the claim with a terminal `qaStatus: "error"`, and on API startup any task left in `running` (e.g. a crash or restart mid-run) is reset to `error` (`resetStaleQaRuns`) so a stuck claim can never block future QA starts.
+
 ### Pause / Resume
 
 Tasks have a `paused` flag (default `false`). When `true`, the coordinator skips the task in all selection queries:
