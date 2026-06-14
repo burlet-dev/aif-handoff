@@ -94,16 +94,19 @@ export function TaskListTable({
             <TableHeaderCell isCompact={isCompact} className="w-28">
               Status
             </TableHeaderCell>
-            <TableHeaderCell isCompact={isCompact} className="w-24">
+            <TableHeaderCell isCompact={isCompact} className="hidden w-24 sm:table-cell">
               Priority
             </TableHeaderCell>
-            <TableHeaderCell isCompact={isCompact} className="w-20">
+            <TableHeaderCell isCompact={isCompact} className="hidden w-20 sm:table-cell">
               Owner
             </TableHeaderCell>
-            <TableHeaderCell isCompact={isCompact} className="w-44">
+            <TableHeaderCell isCompact={isCompact} className="hidden w-44 sm:table-cell">
               Updated
             </TableHeaderCell>
-            <TableHeaderCell isCompact={isCompact} className="w-24 text-center">
+            <TableHeaderCell
+              isCompact={isCompact}
+              className="hidden w-24 text-center sm:table-cell"
+            >
               Order
             </TableHeaderCell>
           </tr>
@@ -172,22 +175,22 @@ export function TaskListTable({
                 </span>
               </td>
               <td
-                className={`px-3 text-muted-foreground ${isCompact ? "py-1 text-2xs" : "py-2.5 text-xs"}`}
+                className={`hidden px-3 text-muted-foreground sm:table-cell ${isCompact ? "py-1 text-2xs" : "py-2.5 text-xs"}`}
               >
                 {task.priority || "-"}
               </td>
               <td
-                className={`px-3 text-muted-foreground ${isCompact ? "py-1 text-2xs" : "py-2.5 text-xs"}`}
+                className={`hidden px-3 text-muted-foreground sm:table-cell ${isCompact ? "py-1 text-2xs" : "py-2.5 text-xs"}`}
               >
                 {task.autoMode ? "AI" : "Manual"}
               </td>
               <td
-                className={`px-3 text-muted-foreground ${isCompact ? "py-1 text-2xs" : "py-2.5 text-xs"}`}
+                className={`hidden px-3 text-muted-foreground sm:table-cell ${isCompact ? "py-1 text-2xs" : "py-2.5 text-xs"}`}
               >
                 {new Date(task.updatedAt).toLocaleString()}
               </td>
               <td
-                className={`px-2 ${isCompact ? "py-1" : "py-2.5"}`}
+                className={`hidden px-2 sm:table-cell ${isCompact ? "py-1" : "py-2.5"}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 {task.status === "backlog" ? (
