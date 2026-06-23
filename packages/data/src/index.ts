@@ -71,6 +71,8 @@ import {
 } from "@aif/shared";
 import { getDb } from "@aif/shared/server";
 
+export * from "./normalizeBacklogPositions.js";
+
 const log = createLogger("data");
 const AUTO_REVIEW_STRATEGY_SET = new Set<string>(AUTO_REVIEW_STRATEGIES);
 const AUTO_REVIEW_FINDING_SOURCE_SET = new Set<string>(AUTO_REVIEW_FINDING_SOURCES);

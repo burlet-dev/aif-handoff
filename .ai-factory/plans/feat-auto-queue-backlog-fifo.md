@@ -84,7 +84,7 @@ There is one important constraint: backlog order is now user-editable via manual
 
 ### Phase 2: Lock In the New Semantics with Regression Tests
 
-- [ ] Task 3: Rewrite the data-layer ordering tests around FIFO creation semantics
+- [x] Task 3: Rewrite the data-layer ordering tests around FIFO creation semantics
   - Files: `packages/data/src/__tests__/index.test.ts`
   - Deliverable: replace the current assertion that documents decreasing default positions with coverage for:
     - tasks `A`, `B`, `C` created in one project receive increasing default positions
@@ -94,27 +94,27 @@ There is one important constraint: backlog order is now user-editable via manual
     - tied backlog positions resolve deterministically by `createdAt`, then `id`
   - Logging requirements: no new runtime logs; encode the intended behavior clearly in test names and comments so future regressions are obvious.
 
-- [ ] Task 4: Add end-to-end regression coverage for the normal task creation path
+- [x] Task 4: Add end-to-end regression coverage for the normal task creation path
   - Files: `packages/agent/src/__tests__/autoQueue.test.ts`, `packages/api/src/__tests__/tasks.test.ts`
   - Deliverable: add regression coverage for the user-facing path that originally exposed the bug. At minimum, prove that tasks created through the ordinary create flow are advanced by Auto-Queue in FIFO backlog order (`A`, then `B`, then `C`) and that API-visible backlog ordering matches the new append-to-tail semantics for ordinary creation. Keep scheduled-task and paused-task behavior unchanged.
   - Include/consider: prefer using the existing API test harness for `POST /tasks` plus an agent/coordinator regression where ordinary `createTask()` defaults, not hand-seeded positions, drive the queue result.
   - Logging requirements: preserve current test-only logging behavior; no new production logs are needed unless a touched boundary gains a new failure mode.
 
-- [ ] Task 5: Preserve the ROADMAP import regression guarantees from `#108`
+- [x] Task 5: Preserve the ROADMAP import regression guarantees from `#108`
   - Files: `packages/api/src/__tests__/roadmapGeneration.test.ts`, `packages/api/src/services/roadmapGeneration.ts` (if needed)
   - Deliverable: ensure the generic `createTask()` fix does not regress the roadmap import flow that already assigns explicit positions to preserve phase/sequence order. Keep this task narrow: the goal is regression protection and comment alignment, not re-designing roadmap import queue policy.
   - Logging requirements: keep roadmap import logs accurate to the final behavior; if comments or debug messages describe queue placement, update them so they no longer imply the old default insertion rule.
 
 ### Phase 3: Safe Remediation for Existing Backlog Data
 
-- [ ] Task 6: Add a tested, opt-in backlog normalization utility for legacy data
+- [x] Task 6: Add a tested, opt-in backlog normalization utility for legacy data
   - Files: `packages/data/src/normalizeBacklogPositions.ts` or `packages/data/src/tools/normalizeBacklogPositions.ts` (new), `packages/data/src/__tests__/normalizeBacklogPositions.test.ts` (new), `packages/data/package.json` and/or root `package.json`, optional `scripts/normalize-backlog-positions.mjs`
   - Deliverable: implement an operator-invoked remediation tool that can inspect and optionally rewrite backlog positions per project (or all projects) into a stable ascending sequence. The utility must default to a safe preview/dry-run mode and clearly warn that applying it overwrites existing manual backlog order.
   - Suggested behavior: separate pure/testable normalization planning logic from the CLI/launcher layer; support project scoping, dry-run vs apply, summary counts, and stable ordering rules for regeneration (for example `createdAt`, then `id`) only when the operator explicitly confirms the rewrite.
   - Execution constraint: do not depend on plain Node importing workspace TypeScript source. If the utility is launched from a script, use either a supported TS runtime explicitly or compiled `dist` artifacts.
   - Logging requirements: `INFO` summary output for inspected/changed task counts, `WARN` before destructive apply, `ERROR` on DB/argument failures. No silent mutations.
 
-- [ ] Task 7: Document the new queue semantics and the remediation workflow
+- [x] Task 7: Document the new queue semantics and the remediation workflow
   - Files: `docs/architecture.md`, `docs/api.md`, `docs/configuration.md` or another operator-facing doc chosen during implementation
   - Deliverable: document that:
     - ordinary backlog task creation appends to the project backlog tail
@@ -127,7 +127,7 @@ There is one important constraint: backlog order is now user-editable via manual
 
 ### Phase 4: Verification and Merge Readiness
 
-- [ ] Task 8: Run focused regression checks, then workspace validation
+- [x] Task 8: Run focused regression checks, then workspace validation
   - Files: no source changes expected unless failures require follow-up fixes
   - Deliverable: run targeted tests for `@aif/data`, ordinary task creation/API ordering, coordinator auto-queue coverage, and roadmap import coverage first, then run the full project-mandated validation path with `npm run ai:validate`. If the remediation utility lands in a new package file set, include its package-level tests in the focused pass and confirm coverage remains above the required threshold for affected packages.
   - Logging requirements: keep command output visible in the implementation session; do not add application logging solely for validation.
