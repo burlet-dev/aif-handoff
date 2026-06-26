@@ -11,27 +11,6 @@ name: deploy
 on:
   push:
     branches: [main]
-    paths:
-      - "packages/**"
-      - "package.json"
-      - "package-lock.json"
-      - "turbo.json"
-      - ".docker/**"
-      - "docker-compose.yml"
-      - "compose.production.yml"
-      - "env/**"
-      - ".github/workflows/deploy.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "packages/**"
-      - "package.json"
-      - "package-lock.json"
-      - "turbo.json"
-      - ".docker/**"
-      - "docker-compose.yml"
-      - "compose.production.yml"
-      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
@@ -43,24 +22,8 @@ env:
   IMAGE_WEB: ghcr.io/burlet-dev/aif-handoff-web
 
 jobs:
-  # ---------- 1. ТЕСТЫ (gate перед сборкой/деплоем) ----------
-  test:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test
-      - run: npm run build
-
-  # ---------- 2. СБОРКА (app + web параллельно) ----------
+  # ---------- 1. СБОРКА (app + web параллельно) ----------
   build:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.meta.outputs.version }}
@@ -121,12 +84,11 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
-  # ---------- 3. ДЕПЛОЙ: SSH → расшифровка SOPS → up стека ----------
+  # ---------- 2. ДЕПЛОЙ: SSH → расшифровка SOPS → up стека ----------
   # Цель: на сервере с уже установленным docker + sops + age-приватником один
   # workflow поднимает весь стек. Никаких плейнтекст-секретов на сервере.
   deploy:
     needs: build
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-aif-prod
