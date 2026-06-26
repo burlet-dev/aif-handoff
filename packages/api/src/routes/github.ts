@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { promisify } from "node:util";
 import { Hono } from "hono";
+import { parse as parseYaml } from "yaml";
 import { getEnv, logger } from "@aif/shared";
 import { listProjects } from "@aif/data";
 import { jsonValidator } from "../middleware/zodValidator.js";
@@ -18,6 +20,33 @@ const execFileAsync = promisify(execFile);
 const log = logger("github-route");
 
 const EXEC_TIMEOUT_MS = 120_000;
+
+/**
+ * Reads per-user oauth tokens from gh's hosts.yml. Returns {login → token} map.
+ * Without this we can only operate under the *active* gh-login; this lets us
+ * impersonate any logged-in account by passing GH_TOKEN to a single subprocess
+ * (no global `gh auth switch` → no race conditions on concurrent requests).
+ */
+function readGhUserTokens(): Map<string, string> {
+  const ghConfigDir = process.env.GH_CONFIG_DIR ?? join(homedir(), ".config", "gh");
+  const hostsPath = join(ghConfigDir, "hosts.yml");
+  if (!existsSync(hostsPath)) return new Map();
+
+  try {
+    const doc = parseYaml(readFileSync(hostsPath, "utf8")) as
+      | { "github.com"?: { users?: Record<string, { oauth_token?: string }> } }
+      | undefined;
+    const users = doc?.["github.com"]?.users ?? {};
+    const map = new Map<string, string>();
+    for (const [login, info] of Object.entries(users)) {
+      if (info?.oauth_token) map.set(login, info.oauth_token);
+    }
+    return map;
+  } catch (err) {
+    log.warn({ err }, "Failed to parse gh hosts.yml");
+    return new Map();
+  }
+}
 
 export const githubRouter = new Hono();
 
@@ -51,34 +80,28 @@ interface GhRepo {
 
 // GET /github/repos?owner=<login> — list repos via gh CLI.
 // Без owner — репо активного аккаунта. С owner — репо указанного user/org.
-// ВАЖНО: `gh repo list <owner>` отдаёт только public-репо даже когда owner ===
-// текущему gh-логину (gh трактует явный owner как «внешний» запрос). Поэтому
-// если owner совпадает с активным логином — вызываем `gh repo list` БЕЗ owner,
-// чтобы видеть все свои private/public/forks/archived.
+//
+// Особенность gh CLI: `gh repo list <owner>` ходит в API как «внешний» запрос →
+// возвращает только public-репо даже когда owner === одному из залогиненных
+// аккаунтов. Чтобы видеть свои private-репо, нужен запрос ПОД ТОКЕНОМ этого
+// аккаунта (БЕЗ owner-аргумента). Поддержка нескольких логинов одновременно
+// сделана через GH_TOKEN на каждый subprocess (без `gh auth switch` — без гонок).
 githubRouter.get("/repos", async (c) => {
   const env = getEnv();
   const gh = env.GH_CLI_PATH;
   const owner = c.req.query("owner")?.trim();
 
-  let effectiveOwner = owner;
-  if (owner) {
-    try {
-      const { stdout: meOut } = await execFileAsync(gh, ["api", "user", "--jq", ".login"], {
-        timeout: 10_000,
-      });
-      const me = meOut.trim();
-      if (me === owner) {
-        effectiveOwner = undefined;
-      }
-    } catch (err) {
-      log.debug({ err }, "Failed to fetch current gh login — falling back to explicit owner");
-    }
-  }
+  const userTokens = readGhUserTokens();
+  const ownerToken = owner ? userTokens.get(owner) : undefined;
 
+  // Если owner совпадает с одним из залогиненных аккаунтов — берём его токен
+  // и запрашиваем без owner-аргумента (видим все private+public+forks).
+  // Иначе (org или произвольный user) — обычный `gh repo list <owner>` под
+  // активным аккаунтом; видны репо доступные активному пользователю.
   const args = [
     "repo",
     "list",
-    ...(effectiveOwner ? [effectiveOwner] : []),
+    ...(ownerToken || !owner ? [] : [owner]),
     "--json",
     "nameWithOwner,description,url,isPrivate,updatedAt,defaultBranchRef",
     "--limit",
@@ -86,9 +109,15 @@ githubRouter.get("/repos", async (c) => {
   ];
 
   try {
-    const { stdout } = await execFileAsync(gh, args, { timeout: EXEC_TIMEOUT_MS });
+    const { stdout } = await execFileAsync(gh, args, {
+      timeout: EXEC_TIMEOUT_MS,
+      env: ownerToken ? { ...process.env, GH_TOKEN: ownerToken } : process.env,
+    });
     const repos: GhRepo[] = JSON.parse(stdout);
-    log.debug({ owner, effectiveOwner, count: repos.length }, "Listed GitHub repos");
+    log.debug(
+      { owner, asUser: ownerToken ? owner : null, count: repos.length },
+      "Listed GitHub repos",
+    );
     return c.json(repos);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
