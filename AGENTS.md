@@ -155,7 +155,7 @@ data/                    # SQLite database files (gitignored)
 
 - **Docker config must stay in sync with packages.** When adding a new package under `packages/` or introducing new inter-package dependencies, update the Docker configuration accordingly:
   - `.docker/Dockerfile` — add build stages, `COPY` directives, and build steps for the new package.
-  - `docker-compose.yml` / `docker-compose.production.yml` — add or update services, volumes, and dependency links as needed.
+  - `docker-compose.yml` / `compose.production.yml` — add or update services, volumes, and dependency links as needed.
   - Verify the Docker build still succeeds after changes: `docker compose build`.
 
 ## Runtime Adapter Sync Rule

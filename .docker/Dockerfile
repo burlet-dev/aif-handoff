@@ -50,8 +50,8 @@ FROM deps AS build
 COPY . .
 RUN npx turbo build
 
-# ---- API ----
-FROM base AS api
+# ---- App (api / agent / mcp share one image, differ only by command) ----
+FROM base AS app
 ENV NODE_ENV=production HOME=/home/node
 # Test toolchain versions (PHP via sury.org, Go via go.dev tarball). Override at
 # build time with --build-arg PHP_VERSION=... / GO_VERSION=...
@@ -72,10 +72,12 @@ COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
 COPY --chown=node:node --from=build /app/packages/data ./packages/data
 COPY --chown=node:node --from=build /app/packages/runtime ./packages/runtime
 COPY --chown=node:node --from=build /app/packages/api ./packages/api
+COPY --chown=node:node --from=build /app/packages/agent ./packages/agent
+COPY --chown=node:node --from=build /app/packages/mcp ./packages/mcp
 COPY --chown=node:node package.json .
 COPY --chown=node:node .docker/docker-entrypoint.sh /usr/local/bin/
 RUN install -d -o node -g node /app /data /home/www
-EXPOSE 3009
+EXPOSE 3009 3010 3100
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["npx", "tsx", "packages/api/src/index.ts"]
 
@@ -100,47 +102,14 @@ COPY .docker/angie.conf /etc/angie/http.d/default.conf
 COPY .docker/angie.production.conf /etc/angie/http.d/production.conf.template
 EXPOSE 80 443
 
-# ---- Agent ----
-FROM base AS agent
-ENV NODE_ENV=production HOME=/home/node
-# Test toolchain versions (PHP via sury.org, Go via go.dev tarball). Override at
-# build time with --build-arg PHP_VERSION=... / GO_VERSION=...
-ARG PHP_VERSION=8.4
-ARG GO_VERSION=1.24.4
-RUN apt-install gosu git curl ca-certificates openssh-client \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
-    && apt-install gh \
-    && npm i -g @anthropic-ai/claude-code @openai/codex
-# PHP + Go so subagents can run tests for user projects in /home/www.
-COPY .docker/install-test-toolchains.sh /usr/local/bin/install-test-toolchains
-RUN chmod +x /usr/local/bin/install-test-toolchains \
-    && PHP_VERSION="${PHP_VERSION}" GO_VERSION="${GO_VERSION}" install-test-toolchains
-ENV PATH="/usr/local/go/bin:/home/node/go/bin:${PATH}"
-COPY --chown=node:node --from=deps /app/node_modules ./node_modules
-COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
-COPY --chown=node:node --from=build /app/packages/data ./packages/data
-COPY --chown=node:node --from=build /app/packages/runtime ./packages/runtime
-COPY --chown=node:node --from=build /app/packages/agent ./packages/agent
-COPY --chown=node:node package.json .
-COPY --chown=node:node .docker/docker-entrypoint.sh /usr/local/bin/
-RUN install -d -o node -g node /app /data /home/www
-EXPOSE 3010
-ENTRYPOINT ["docker-entrypoint.sh"]
+# Legacy targets `api` / `agent` / `mcp` collapsed into `app` above — keep aliases
+# so existing dev compose (`target: api|agent|mcp`) keeps working until callers
+# migrate to `target: app` with per-service `command:` in compose.
+FROM app AS api
+CMD ["npx", "tsx", "packages/api/src/index.ts"]
+
+FROM app AS agent
 CMD ["npx", "tsx", "packages/agent/src/index.ts"]
 
-# ---- MCP ----
-FROM base AS mcp
-ENV NODE_ENV=production HOME=/home/node
-RUN apt-install ca-certificates gosu
-COPY --chown=node:node --from=deps /app/node_modules ./node_modules
-COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
-COPY --chown=node:node --from=build /app/packages/data ./packages/data
-COPY --chown=node:node --from=build /app/packages/runtime ./packages/runtime
-COPY --chown=node:node --from=build /app/packages/mcp ./packages/mcp
-COPY --chown=node:node package.json .
-COPY --chown=node:node .docker/docker-entrypoint.sh /usr/local/bin/
-RUN install -d -o node -g node /app /data /home/www
-EXPOSE 3100
-ENTRYPOINT ["docker-entrypoint.sh"]
+FROM app AS mcp
 CMD ["npx", "tsx", "packages/mcp/src/index.ts"]

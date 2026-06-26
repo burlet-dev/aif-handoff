@@ -158,7 +158,7 @@ The dev compose wires up a small in-container broker that runs
    automatically (status polled every second).
 4. Run `docker compose restart agent` to pick up the credentials.
 
-**Production note:** the broker is **dev-only**. `docker-compose.production.yml`
+**Production note:** the broker is **dev-only**. `compose.production.yml`
 sets `AIF_ENABLE_CODEX_LOGIN_PROXY=false`. For production, configure
 `OPENAI_API_KEY` in `.env` instead.
 
@@ -275,7 +275,7 @@ Web UI at `localhost:5180`, API at `localhost:3009`, MCP at `localhost:${MCP_POR
 ### Production
 
 ```bash
-docker compose -f docker-compose.production.yml up --build
+docker compose -f compose.production.yml up --build
 ```
 
 Authentication: set `ANTHROPIC_API_KEY` in `.env`, or log in via `docker compose exec agent claude login` and then `docker compose restart` (see [Authentication](#authentication) above).

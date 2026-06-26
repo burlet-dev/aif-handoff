@@ -20,6 +20,11 @@ dist/
 .env.local
 .env.*.local
 
+# SOPS — расшифрованные вольты НЕ коммитим, только зашифрованные env/aif.env и env/docker.env
+env/*.decrypted
+env/*.plain
+env/*.sops.bak
+
 # IDE
 .idea/
 .vscode/

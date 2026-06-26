@@ -1,0 +1,16 @@
+# Конфигурация SOPS — правила шифрования секретов в этом репозитории.
+#
+# Здесь только ПУБЛИЧНЫЕ age-ключи (recipients) — это НЕ секрет, их можно
+# коммитить. Приватные ключи (которыми расшифровывают) лежат у владельцев:
+#   - ноут:   ~/.config/sops/age/keys.txt
+#   - сервер: его приватный ключ на сервере (раскладывает Ansible).
+# Оба перечислены ниже → расшифровать могут и ноут, и сервер.
+# Добавил/сменил recipient → выполни `sops updatekeys -y env/*.env`.
+#
+# creation_rules: при `sops <файл>` SOPS по path_regex выбирает, кому шифровать.
+creation_rules:
+  # Все «вольты» в папке env/ — шифруются для перечисленных recipients.
+  - path_regex: env/.*\.env$
+    # Несколько ключей — через запятую (1-й — ноут, 2-й — сервер).
+    age: >-
+      age1aaanuhnxsvcyrk7chdrqp4myc3p46v84yq9nc9xs2nm2s6k44yfq0dxm7t,age1w5jyqq3urtzhf0k650tf02pmea2rxhwa8fdv75lcvc70fv7declsk6c3tv

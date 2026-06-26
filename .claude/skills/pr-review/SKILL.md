@@ -287,7 +287,7 @@ Concrete obligations from `CLAUDE.md`:
   `bootstrap.ts` registration, Dockerfile if native deps. Every adapter declares
   `capabilities.usageReporting` and returns `RuntimeRunResult.usage` as a concrete value.
 - **Docker Sync Rule** — new package / new inter-package dep ⇒ `.docker/Dockerfile`,
-  `docker-compose.yml`, `docker-compose.production.yml`.
+  `docker-compose.yml`, `compose.production.yml`.
 - **DB schema change** — `packages/shared/src/schema.ts` changed ⇒ migration added in
   `packages/shared/src/db.ts`, `user_version` bumped, backfill covered in tests.
 - **API route change** — new or modified route in `packages/api/src/routes/**` ⇒

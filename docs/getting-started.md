@@ -85,7 +85,7 @@ Copy the URL and open it in your browser. **Important:** the terminal wraps long
 ### Production
 
 ```bash
-docker compose -f docker-compose.production.yml up --build
+docker compose -f compose.production.yml up --build
 ```
 
 Only ports 80/443 exposed. Security hardening, healthchecks, resource limits, and log rotation included. Authentication works the same as in development — see [Docker Authentication](#docker-authentication) above.

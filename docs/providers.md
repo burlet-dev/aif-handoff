@@ -384,7 +384,7 @@ clears the active session on the child `exit` event and `/status` flips to
 | `AGENT_INTERNAL_URL`           | `http://agent:3010` | Base URL the api uses to reach the broker.       |
 
 **Production guidance:** the broker is a dev-only convenience. In production,
-set `AIF_ENABLE_CODEX_LOGIN_PROXY=false` (the default in `docker-compose.production.yml`)
+set `AIF_ENABLE_CODEX_LOGIN_PROXY=false` (the default in `compose.production.yml`)
 and provision `OPENAI_API_KEY` via `.env` instead.
 
 ### Bypass semantics (AGENT_BYPASS_PERMISSIONS)
