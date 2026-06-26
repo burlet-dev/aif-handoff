@@ -7,7 +7,6 @@ ssh_user := "helm-prod"
 ssh_host := "178.104.168.5"
 ssh_port := "29504"
 ssh_key  := "~/.ssh/id_ed25519_servers"
-project  := "aif"
 
 # Аутентификация: только этот ключ, без перебора агента.
 ssh_opts := "-o IdentitiesOnly=yes -i " + ssh_key
@@ -15,7 +14,7 @@ ssh_opts := "-o IdentitiesOnly=yes -i " + ssh_key
 # Собранные команды.
 conn    := "ssh -t " + ssh_opts + " -p " + ssh_port + " " + ssh_user + "@" + ssh_host
 compose := "docker compose -f docker-compose.yml -f compose.production.yml"
-remote  := "cd ~/" + project + "/repo"
+remote  := "cd ~/aif/aif-handoff"
 
 # По умолчанию — список доступных команд.
 default:

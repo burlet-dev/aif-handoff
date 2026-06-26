@@ -1,3 +1,5 @@
+name: aif-handoff
+
 services:
   api:
     build:

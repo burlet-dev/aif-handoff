@@ -96,12 +96,11 @@ jobs:
           script: |
             set -e
 
-            # Структура на сервере: ~/aif/ (контейнер-папка) → внутри сам репозиторий
-            # repo/ и рядом projects/ (рабочие проекты) + data/ (SQLite).
-            PROJECT="aif"
+            # Структура на сервере: ~/aif/ → внутри aif-handoff/ (репозиторий) +
+            # projects/ (рабочие проекты) + data/ (SQLite).
             REPO="burlet-dev/aif-handoff"
-            BASE_DIR="$HOME/$PROJECT"        # ~/aif
-            REPO_DIR="$BASE_DIR/repo"        # ~/aif/repo
+            BASE_DIR="$HOME/aif"
+            REPO_DIR="$BASE_DIR/aif-handoff"
             PROJECTS_DIR="$BASE_DIR/projects"
             DATA_DIR="$BASE_DIR/data"
 
