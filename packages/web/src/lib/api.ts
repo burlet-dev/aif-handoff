@@ -755,7 +755,7 @@ export const api = {
   },
 
   // GitHub import
-  listGitHubRepos(): Promise<
+  listGitHubRepos(owner?: string): Promise<
     Array<{
       nameWithOwner: string;
       description: string;
@@ -765,8 +765,14 @@ export const api = {
       defaultBranchRef: { name: string } | null;
     }>
   > {
-    console.debug("[api] GET /github/repos");
-    return request("/github/repos");
+    const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+    console.debug(`[api] GET /github/repos${qs}`);
+    return request(`/github/repos${qs}`);
+  },
+
+  listGitHubAccounts(): Promise<string[]> {
+    console.debug("[api] GET /github/accounts");
+    return request("/github/accounts");
   },
 
   cloneGitHubRepo(input: {

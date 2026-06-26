@@ -1,12 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api.js";
 
-export function useGitHubRepos(enabled: boolean) {
+export function useGitHubRepos(enabled: boolean, owner?: string) {
   return useQuery({
-    queryKey: ["github-repos"],
-    queryFn: api.listGitHubRepos,
+    queryKey: ["github-repos", owner ?? "_mine"],
+    queryFn: () => api.listGitHubRepos(owner),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+export function useGitHubAccounts(enabled: boolean) {
+  return useQuery({
+    queryKey: ["github-accounts"],
+    queryFn: api.listGitHubAccounts,
+    enabled,
+    staleTime: 5 * 60_000,
   });
 }
 

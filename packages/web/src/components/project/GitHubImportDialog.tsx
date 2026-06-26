@@ -8,10 +8,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { useGitHubRepos, useCloneRepo } from "@/hooks/useGitHub";
+import { useGitHubRepos, useGitHubAccounts, useCloneRepo } from "@/hooks/useGitHub";
 import { useCreateProject } from "@/hooks/useProjects";
 import type { Project } from "@aif/shared/browser";
+
+const MINE = "_mine";
 
 interface Props {
   open: boolean;
@@ -22,10 +25,24 @@ interface Props {
 export function GitHubImportDialog({ open, onOpenChange, onProjectCreated }: Props) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const { data: repos, isLoading, error } = useGitHubRepos(open);
+  const [owner, setOwner] = useState<string>(MINE);
+  const { data: accounts } = useGitHubAccounts(open);
+  const {
+    data: repos,
+    isLoading,
+    error,
+  } = useGitHubRepos(open, owner === MINE ? undefined : owner);
   const cloneRepo = useCloneRepo();
   const createProject = useCreateProject();
   const [cloningRepo, setCloningRepo] = useState<string | null>(null);
+
+  const ownerOptions = useMemo(
+    () => [
+      { value: MINE, label: "My repositories" },
+      ...(accounts ?? []).map((a) => ({ value: a, label: a })),
+    ],
+    [accounts],
+  );
 
   const filtered = useMemo(() => {
     if (!repos) return [];
@@ -92,15 +109,24 @@ export function GitHubImportDialog({ open, onOpenChange, onProjectCreated }: Pro
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search repositories..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-            autoFocus
+        <div className="flex gap-2">
+          <Select
+            value={owner}
+            options={ownerOptions}
+            onChange={(e) => setOwner(e.target.value)}
+            searchable={ownerOptions.length > 5}
+            className="w-44"
           />
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search repositories..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+              autoFocus
+            />
+          </div>
         </div>
 
         <div className="max-h-80 max-sm:max-h-[70vh] overflow-y-auto border border-border">

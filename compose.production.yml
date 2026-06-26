@@ -29,6 +29,8 @@ services:
       - AIF_ENABLE_CODEX_LOGIN_PROXY=false
       - TMPDIR=/home/node/.claude/tmp
       - PROJECTS_MOUNT=/home/www
+      # gh-аутентификация переживает рестарты, потому что лежит на persistent claude-auth volume.
+      - GH_CONFIG_DIR=/home/node/.claude/.gh
     volumes: !override
       - ${HOME}/aif/data:/data
       - ${HOME}/aif/projects:/home/www
@@ -135,6 +137,7 @@ services:
       - AIF_ENABLE_CODEX_LOGIN_PROXY=false
       - TMPDIR=/home/node/.claude/tmp
       - PROJECTS_MOUNT=/home/www
+      - GH_CONFIG_DIR=/home/node/.claude/.gh
     volumes: !override
       - ${HOME}/aif/data:/data
       - ${HOME}/aif/projects:/home/www

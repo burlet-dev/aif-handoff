@@ -49,37 +49,91 @@ interface GhRepo {
   defaultBranchRef: { name: string } | null;
 }
 
-// GET /github/repos — list user repos via gh CLI
+// GET /github/repos?owner=<login> — list repos via gh CLI.
+// Без owner — репо активного аккаунта. С owner — репо указанного user/org
+// (вызывает `gh repo list <owner>`); требует, чтобы активный gh-аккаунт имел доступ.
 githubRouter.get("/repos", async (c) => {
   const env = getEnv();
   const gh = env.GH_CLI_PATH;
+  const owner = c.req.query("owner")?.trim();
+
+  const args = [
+    "repo",
+    "list",
+    ...(owner ? [owner] : []),
+    "--json",
+    "nameWithOwner,description,url,isPrivate,updatedAt,defaultBranchRef",
+    "--limit",
+    "200",
+  ];
 
   try {
-    const { stdout } = await execFileAsync(
-      gh,
-      [
-        "repo",
-        "list",
-        "--json",
-        "nameWithOwner,description,url,isPrivate,updatedAt,defaultBranchRef",
-        "--limit",
-        "200",
-      ],
-      { timeout: EXEC_TIMEOUT_MS },
-    );
-
+    const { stdout } = await execFileAsync(gh, args, { timeout: EXEC_TIMEOUT_MS });
     const repos: GhRepo[] = JSON.parse(stdout);
-    log.debug({ count: repos.length }, "Listed GitHub repos");
+    log.debug({ owner, count: repos.length }, "Listed GitHub repos");
     return c.json(repos);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.error({ err }, "Failed to list GitHub repos");
+    log.error({ owner, err }, "Failed to list GitHub repos");
 
     if (message.includes("not logged in") || message.includes("auth login")) {
       return c.json({ error: "GitHub CLI not authenticated. Run: gh auth login" }, 401);
     }
 
     return c.json({ error: `Failed to list repos: ${message}` }, 500);
+  }
+});
+
+// GET /github/accounts — список namespace'ов, которые видит UI как источники репо.
+// Собирает: логины всех залогиненных `gh` аккаунтов + org'и, в которых они состоят.
+// Дедуплицирует. Если ни один аккаунт не залогинен — возвращает [].
+githubRouter.get("/accounts", async (c) => {
+  const env = getEnv();
+  const gh = env.GH_CLI_PATH;
+
+  try {
+    // `gh auth status` пишет в stderr (см. https://github.com/cli/cli/issues/3692).
+    // Игнорируем код возврата: если нет логинов — просто пустой stderr.
+    const { stderr, stdout } = await execFileAsync(gh, ["auth", "status"], {
+      timeout: 10_000,
+    }).catch((err: { stdout?: string; stderr?: string }) => ({
+      stdout: err.stdout ?? "",
+      stderr: err.stderr ?? "",
+    }));
+
+    const text = `${stdout}\n${stderr}`;
+    // Pattern: "Logged in to github.com account <login> (...)" — новый формат gh ≥ 2.40
+    // или "Logged in to github.com as <login>" — старый формат.
+    const logins = new Set<string>();
+    const re = /Logged in to \S+\s+(?:account|as)\s+([\w.-]+)/g;
+    for (const m of text.matchAll(re)) {
+      logins.add(m[1]);
+    }
+
+    // Для каждого залогиненного аккаунта добираем org'и, в которых он состоит.
+    const accounts = new Set<string>(logins);
+    for (const login of logins) {
+      try {
+        const { stdout: orgsOut } = await execFileAsync(
+          gh,
+          ["api", "user/orgs", "--jq", ".[].login", "--hostname", "github.com"],
+          { timeout: 10_000 },
+        );
+        for (const org of orgsOut
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)) {
+          accounts.add(org);
+        }
+      } catch (err) {
+        log.debug({ login, err }, "Failed to fetch orgs for account, skipping");
+      }
+    }
+
+    return c.json(Array.from(accounts).sort());
+  } catch (err) {
+    log.error({ err }, "Failed to list GitHub accounts");
+    return c.json({ error: "Failed to list accounts" }, 500);
   }
 });
 
