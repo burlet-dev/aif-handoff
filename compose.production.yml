@@ -29,6 +29,9 @@ services:
       - AIF_ENABLE_CODEX_LOGIN_PROXY=false
       - TMPDIR=/home/node/.claude/tmp
       - PROJECTS_MOUNT=/home/www
+      # GIT_PROJECTS_DIR — путь ВНУТРИ контейнера, где gh repo clone кладёт репозитории.
+      # Должен совпадать с PROJECTS_MOUNT (bind-mount хост ↔ container).
+      - GIT_PROJECTS_DIR=/home/www
       # gh-аутентификация переживает рестарты, потому что лежит на persistent claude-auth volume.
       - GH_CONFIG_DIR=/home/node/.claude/.gh
     volumes: !override
@@ -137,6 +140,7 @@ services:
       - AIF_ENABLE_CODEX_LOGIN_PROXY=false
       - TMPDIR=/home/node/.claude/tmp
       - PROJECTS_MOUNT=/home/www
+      - GIT_PROJECTS_DIR=/home/www
       - GH_CONFIG_DIR=/home/node/.claude/.gh
     volumes: !override
       - ${HOME}/aif/data:/data
