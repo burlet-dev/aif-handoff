@@ -92,9 +92,9 @@ services:
       - "traefik.enable=true"
       # Домен + HTTPS-entrypoint (websecure = :443, объявлен в стеке Traefik).
       - "traefik.http.routers.aif.rule=Host(`aif.burlet.dev`)"
-      - "traefik.http.routers.aif.entrypoints=websecure"
+      - "traefik.http.routers.aif.entrypoints=websecure-internal"
       - "traefik.http.routers.aif.tls=true"
-      - "traefik.http.routers.aif.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.aif.tls.certresolver=letsencrypt-dns"
       # Порт КОНТЕЙНЕРА, куда Traefik проксирует.
       - "traefik.http.services.aif.loadbalancer.server.port=80"
       # web в нескольких сетях — явно указываем Traefik ходить через proxy.
