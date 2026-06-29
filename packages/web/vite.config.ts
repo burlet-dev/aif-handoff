@@ -35,13 +35,22 @@ export default defineConfig(async () => {
     },
     // Lazy-load the Tailwind plugin so Vite config bundling does not try to parse
     // the native oxide binary as UTF-8 before Node can load it normally.
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      // Strip `crossorigin` from script/link tags in production HTML.
+      // Cloudflare Access does not pass CF_AppSession cookie on requests
+      // made in CORS mode (Origin header present), causing 302 redirects
+      // to the login page instead of serving JS/CSS assets.
+      {
+        name: "strip-crossorigin",
+        enforce: "post" as const,
+        transformIndexHtml(html) {
+          return html.replace(/ crossorigin/g, "");
+        },
+      },
+    ],
     build: {
-      // Disable crossorigin attribute on <script> tags. Cloudflare Access
-      // treats CORS-mode requests differently and blocks module scripts
-      // behind its auth wall even when the session cookie is present.
-      crossOriginLoading: false,
-      modulePreload: { polyfill: false },
       rolldownOptions: {
         output: {
           manualChunks(id) {
